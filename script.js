@@ -1059,6 +1059,12 @@ class Piece {
                 this.rotationTransition = false;
                 this.rotationProgress = 0;
                 
+                // Clear target references to avoid memory leaks and state issues
+                this.targetTetromino = null;
+                this.targetPattern = undefined;
+                this.targetKick = undefined;
+                this.originalTetromino = null;
+                
                 // Reset rotation angles
                 this.rotationAngleX = 0;
                 this.rotationAngleY = 0;
@@ -1105,10 +1111,17 @@ class Piece {
             
             if (this.completionEffectProgress >= 1) {
                 this.showCompletionEffect = false;
+                this.completionEffectProgress = 0;
+                
                 // Reset rotation angles
                 this.rotationAngleX = 0;
                 this.rotationAngleY = 0;
                 this.rotationAngleZ = 0;
+                
+                // Clear all rotation references
+                this.rotationDirection = null;
+                this.originalTetromino = null;
+                this.targetTetromino = null;
             }
         }
         
@@ -2306,6 +2319,8 @@ let secondLastTapX = 0; // Track position of second-to-last tap
 let secondLastTapY = 0; // Track position of second-to-last tap
 const TAP_DISTANCE_THRESHOLD = 40; // Increased from 20 to be more forgiving for double-taps
 const MOVE_COOLDOWN = 60; // Cooldown between moves to prevent too rapid movement
+let tapCount = 0;
+let doubleTapInProgress = false;
 
 // Initialize touch controls
 function initTouchControls() {
@@ -2394,40 +2409,57 @@ function handleTouchEnd(event) {
     const touchX = touch.clientX;
     const touchY = touch.clientY;
     
+    // Skip if we're in the middle of a rotation animation
+    if (p.rotationTransition || p.showCompletionEffect) {
+        return;
+    }
+    
+    // If a double tap is in progress, prevent further processing
+    if (doubleTapInProgress) {
+        return;
+    }
+    
     // Check for tap (quick touch)
     if (touchDuration < TAP_THRESHOLD) {
-        // Calculate distances between taps
+        // Calculate distance from last tap
         const distanceFromLastTap = Math.sqrt(
             Math.pow(touchX - lastTapX, 2) + 
             Math.pow(touchY - lastTapY, 2)
         );
         
-        // Check for double tap (for hard drop)
-        const timeBetweenTaps = touchEndTime - lastTapTime;
+        const timeSinceLastTap = touchEndTime - lastTapTime;
         
-        if (lastTapTime > 0 && timeBetweenTaps < DOUBLE_TAP_THRESHOLD && distanceFromLastTap < TAP_DISTANCE_THRESHOLD) {
-            // This is a double-tap, do hard drop
+        // Check for double tap (two taps close together in time and position)
+        if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD && distanceFromLastTap < TAP_DISTANCE_THRESHOLD) {
+            // This is a double tap - perform hard drop
+            doubleTapInProgress = true;
+            
+            // Perform the hard drop
             p.hardDrop();
             
-            // Reset tap tracking to prevent any further actions
+            // Reset tap tracking
+            tapCount = 0;
             lastTapTime = 0;
             lastTapX = 0;
             lastTapY = 0;
             
-            // Debug
-            console.log("Double tap detected - hard drop");
-            return;
-        } 
-        
-        // Only rotate if we're not in the middle of another action
-        if (!p.rotationTransition && !p.showCompletionEffect) {
-            // Single tap - rotates piece
-            p.rotate('right');
+            // Reset the double tap flag after a delay
+            setTimeout(() => {
+                doubleTapInProgress = false;
+            }, 300);
             
-            // Update tracking for potential double tap
+            return;
+        }
+        
+        // This is a single tap
+        if (!doubleTapInProgress) {
+            // If this might be the first tap of a double tap, record it
             lastTapTime = touchEndTime;
             lastTapX = touchX;
             lastTapY = touchY;
+            
+            // Only rotate on single tap if we're not expecting a double tap
+            p.rotate('right');
         }
     }
     
