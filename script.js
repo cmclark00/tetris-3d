@@ -325,9 +325,26 @@ for (let i = 0; i < PIECES.length; i++) {
     PIECE_3D_ORIENTATIONS[i].push(verticalRotation);
 }
 
-// Add this to the loadOptions function
+// Load options from localStorage
 function loadOptions() {
-    // ... existing code ...
+    const savedOptions = localStorage.getItem('tetris3DOptions');
+    if (savedOptions) {
+        const options = JSON.parse(savedOptions);
+        
+        enable3DEffects = options.enable3DEffects !== undefined ? options.enable3DEffects : true;
+        enableSpinAnimations = options.enableSpinAnimations !== undefined ? options.enableSpinAnimations : true;
+        animationSpeed = options.animationSpeed !== undefined ? options.animationSpeed : 0.05;
+        forceMobileControls = options.forceMobileControls !== undefined ? options.forceMobileControls : false;
+        
+        // Update UI controls
+        if (toggle3DEffects) toggle3DEffects.checked = enable3DEffects;
+        if (toggleSpinAnimations) toggleSpinAnimations.checked = enableSpinAnimations;
+        if (animationSpeedSlider) animationSpeedSlider.value = animationSpeed;
+        
+        if (toggleMobileControls) {
+            toggleMobileControls.checked = forceMobileControls;
+        }
+    }
     
     // Detect if we're on mobile and reduce effects automatically
     if (isMobile) {
@@ -335,6 +352,16 @@ function loadOptions() {
         maxParticlesPerFirework = 15;
         isReducedEffects = true;
     }
+}
+
+// Save options to localStorage
+function saveOptions() {
+    localStorage.setItem('tetris3DOptions', JSON.stringify({
+        enable3DEffects,
+        enableSpinAnimations,
+        animationSpeed,
+        forceMobileControls
+    }));
 }
 
 // Modify the Firework constructor to use the max particles limit
@@ -1654,16 +1681,18 @@ function draw() {
     
     lastTimestamp = now - (elapsed % FRAME_MIN_TIME);
     
-    // Clear canvas
+    // Clear the canvas completely to make sure nothing is left over
     ctx.fillStyle = EMPTY;
-    ctx.fillRect(0, 0, COLS * BLOCK_SIZE, ROWS * BLOCK_SIZE);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // Draw the board - this shows only locked pieces
+    // Draw the board - this shows locked pieces
     drawBoard();
     
-    // Always draw the active piece
+    // Always draw the active piece if it exists
     if (p) {
         p.draw();
+    } else {
+        console.warn("No active piece to draw!");
     }
     
     // Fireworks - limit on mobile
@@ -2029,8 +2058,8 @@ function optimizeForMobile() {
         maxFireworks = 5;
         maxParticlesPerFirework = 10;
         
-        // Use lower frame rate for mobile
-        const FRAME_MIN_TIME = (1000 / MOBILE_FPS_LIMIT);
+        // Use lower frame rate for mobile - update global variable
+        FRAME_MIN_TIME = (1000 / MOBILE_FPS_LIMIT);
         
         // Reduce shadow complexity
         showShadow = false; // Start with shadow off on mobile for performance
@@ -2053,4 +2082,153 @@ function cleanup() {
 // Call cleanup periodically on mobile devices
 if (isMobile) {
     setInterval(cleanup, 60000); // Cleanup every minute
+}
+
+// Initialize game
+function init() {
+    // Reset game variables
+    score = 0;
+    level = 1;
+    lines = 0;
+    gameOver = false;
+    paused = false;
+    
+    // Clear the board
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            board[r][c] = EMPTY;
+        }
+    }
+    
+    // Update UI
+    scoreElement.textContent = score;
+    levelElement.textContent = level;
+    linesElement.textContent = lines;
+    
+    // Reset canvas to ensure clean state
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    nextPieceCtx.clearRect(0, 0, nextPieceCanvas.width, nextPieceCanvas.height);
+    
+    // Load saved options
+    loadOptions();
+    
+    // Draw the board
+    drawBoard();
+    
+    // Generate initial pieces
+    p = randomPiece();
+    nextPiece = randomPiece();
+    
+    // Draw initial next piece
+    nextPiece.drawNextPiece();
+    
+    // Set up game interval
+    dropStart = Date.now();
+    gameInterval = setInterval(dropPiece, 1000);
+    
+    // Listen for keyboard events
+    document.addEventListener('keydown', control);
+    
+    // Force immediate draw to show pieces
+    draw();
+    
+    console.log("Game initialized with new pieces");
+}
+
+// Drop the piece - called by interval
+function dropPiece() {
+    if (gameOver || paused) return;
+    
+    let now = Date.now();
+    let delta = now - dropStart;
+    
+    // Drop speed depends on level
+    let speed = 1000 * (1 - (level - 1) * 0.1);
+    speed = Math.max(speed, 100); // Don't allow too fast drops (minimum 100ms)
+    
+    if (delta > speed) {
+        p.moveDown();
+        dropStart = now;
+        
+        // If we can't move down and we're still at the top, game over
+        if (p.collision(0, 1) && p.y < 1) {
+            gameOver = true;
+            showGameOver();
+        }
+    }
+}
+
+// Show game over modal
+function showGameOver() {
+    clearInterval(gameInterval);
+    finalScoreElement.textContent = score;
+    gameOverModal.classList.add('active');
+    console.log("Game over!");
+}
+
+// The control function
+function control(event) {
+    if (gameOver) return;
+    if (paused && event.keyCode !== 80) return; // Allow only P key if paused
+    
+    switch(event.keyCode) {
+        case 37: // Left arrow
+        case 65: // A key
+            p.moveLeft();
+            break;
+        case 38: // Up arrow - no function
+            break;
+        case 39: // Right arrow
+        case 68: // D key
+            p.moveRight();
+            break;
+        case 40: // Down arrow
+        case 83: // S key
+            p.moveDown();
+            break;
+        case 81: // Q key - rotate left
+            p.rotate('left');
+            break;
+        case 69: // E key - rotate right
+            p.rotate('right');
+            break;
+        case 87: // W key - 3D vertical rotation
+            p.rotate3DX();
+            break;
+        case 88: // X key - 3D horizontal rotation
+            p.rotate3DY();
+            break;
+        case 32: // Space bar - hard drop
+            p.hardDrop();
+            break;
+        case 80: // P key - pause
+            togglePause();
+            break;
+        case 72: // H key - toggle shadow
+            toggleShadow();
+            break;
+    }
+}
+
+// Toggle pause
+function togglePause() {
+    paused = !paused;
+    
+    if (paused) {
+        clearInterval(gameInterval);
+        pauseBtn.textContent = "Resume";
+    } else {
+        gameInterval = setInterval(dropPiece, Math.max(100, 1000 - (level * 100)));
+        pauseBtn.textContent = "Pause";
+    }
+}
+
+// Toggle shadow display
+function toggleShadow() {
+    showShadow = !showShadow;
+    if (!gameOver && !paused) {
+        // Redraw current piece to show/hide shadow
+        p.undraw();
+        p.draw();
+    }
 } 
