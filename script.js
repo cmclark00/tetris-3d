@@ -78,11 +78,12 @@ let controllerMapping = {
     left: [14, 'dpadLeft'],     // D-pad left or left stick left
     right: [15, 'dpadRight'],   // D-pad right or left stick right
     down: [13, 'dpadDown'],     // D-pad down or left stick down
+    up: [12, 'dpadUp'],         // D-pad up (added for hard drop)
     rotateLeft: [0, 'buttonA'], // A button
     rotateRight: [1, 'buttonB'], // B button
     mirrorH: [3, 'buttonY'],    // Y button - horizontal mirror
     mirrorV: [2, 'buttonX'],    // X button - vertical mirror
-    hardDrop: [7, 'rightTrigger'], // RT button
+    hardDrop: [12, 'dpadUp'],   // Changed from RT to D-pad up
     pause: [9, 'start']         // Start button
 };
 let lastControllerState = {};
@@ -1095,30 +1096,11 @@ class Piece {
                     this.shadowTetromino = this.targetTetromino;
                 }
                 
-                // Reset rotation state
-                this.rotationTransition = false;
-                this.rotationProgress = 0;
-                
-                // Clear target references to avoid memory leaks and state issues
-                this.targetTetromino = null;
-                this.targetPattern = undefined;
-                this.targetKick = undefined;
-                this.originalTetromino = null;
-                
-                // Reset rotation angles
-                this.rotationAngleX = 0;
-                this.rotationAngleY = 0;
-                this.rotationAngleZ = 0;
+                // Completely reset rotation state
+                this.resetAnimationState();
                 
                 // Recalculate shadow position
                 this.calculateShadowY();
-                
-                // Skip completion effect on mobile for performance
-                if (!mobilePerformanceMode && enable3DEffects) {
-                    // Start completion effect
-                    this.showCompletionEffect = true;
-                    this.completionEffectProgress = 0;
-                }
                 
                 // Draw in new position
                 this.draw();
@@ -1150,18 +1132,12 @@ class Piece {
             this.completionEffectProgress += completionStep;
             
             if (this.completionEffectProgress >= 1) {
-                this.showCompletionEffect = false;
-                this.completionEffectProgress = 0;
+                // Completely reset animation state
+                this.resetAnimationState();
                 
-                // Reset rotation angles
-                this.rotationAngleX = 0;
-                this.rotationAngleY = 0;
-                this.rotationAngleZ = 0;
-                
-                // Clear all rotation references
-                this.rotationDirection = null;
-                this.originalTetromino = null;
-                this.targetTetromino = null;
+                // Redraw with final state
+                this.draw();
+                return;
             }
         }
         
@@ -2338,9 +2314,16 @@ function pollControllers() {
             }, buttonRepeatRates['down']); // Faster repeat for down
         }
     } 
+    // Up direction for hard drop
+    else if (controller.axes[1] < -deadzone) {
+        if (lastControllerState[controller.index].axes[1] >= -deadzone) {
+            // One-time action for hard drop (no need for repeat)
+            handleControllerAction('up');
+        }
+    }
     else {
         // Stick returned to center, clear down timer
-        if (lastControllerState[controller.index].axes[1] > deadzone) {
+        if (Math.abs(lastControllerState[controller.index].axes[1]) > deadzone) {
             if (buttonHoldTimers['down']) {
                 clearInterval(buttonHoldTimers['down']);
                 buttonHoldTimers['down'] = null;
@@ -2356,6 +2339,14 @@ function pollControllers() {
 function handleControllerAction(action) {
     if (paused && action !== 'pause') return;
     
+    // Skip all actions if currently in an animation
+    if (p.rotationTransition || p.showCompletionEffect) {
+        if (action === 'pause') {
+            togglePause();
+        }
+        return;
+    }
+    
     switch(action) {
         case 'left':
             p.moveLeft();
@@ -2365,6 +2356,10 @@ function handleControllerAction(action) {
             break;
         case 'down':
             p.moveDown();
+            break;
+        case 'up':
+        case 'hardDrop':
+            p.hardDrop();
             break;
         case 'rotateLeft':
             p.rotate('left');
@@ -2377,12 +2372,6 @@ function handleControllerAction(action) {
             break;
         case 'mirrorV':
             p.mirrorVertical();
-            break;
-        case 'hardDrop':
-            // Only perform hard drop if not in the middle of an animation
-            if (!p.rotationTransition && !p.showCompletionEffect) {
-                p.hardDrop();
-            }
             break;
         case 'pause':
             togglePause();
@@ -2428,12 +2417,21 @@ function control(event) {
     if (gameOver) return;
     if (paused && event.keyCode !== 80) return; // Allow only P key if paused
     
+    // Skip all actions if currently in an animation
+    if (p.rotationTransition || p.showCompletionEffect) {
+        if (event.keyCode === 80) { // P key for pause still works
+            togglePause();
+        }
+        return;
+    }
+    
     switch(event.keyCode) {
         case 37: // Left arrow
         case 65: // A key
             p.moveLeft();
             break;
-        case 38: // Up arrow - no function
+        case 38: // Up arrow
+            p.hardDrop();
             break;
         case 39: // Right arrow
         case 68: // D key
