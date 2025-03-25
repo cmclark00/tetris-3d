@@ -2185,14 +2185,17 @@ let touchStartTime = 0;
 const SWIPE_THRESHOLD = 15; // Reduced threshold for more responsive movement
 const TAP_THRESHOLD = 200; // milliseconds
 const DOUBLE_TAP_THRESHOLD = 400; // Increased to prevent accidental double-taps
+const TRIPLE_TAP_THRESHOLD = 600; // Maximum time between first and third tap
 let lastTapTime = 0;
+let secondLastTapTime = 0; // Track time of second-to-last tap for triple tap detection
 let lastMoveTime = 0;
 let touchIdentifier = null;
-let multiTouchDetected = false;
-const MOVE_COOLDOWN = 60; // Reduced cooldown for smoother movement
 let lastTapX = 0;
 let lastTapY = 0;
+let secondLastTapX = 0; // Track position of second-to-last tap
+let secondLastTapY = 0; // Track position of second-to-last tap
 const TAP_DISTANCE_THRESHOLD = 20; // Maximum distance to consider as same-position tap
+const MOVE_COOLDOWN = 60; // Cooldown between moves to prevent too rapid movement
 
 // Initialize touch controls
 function initTouchControls() {
@@ -2210,13 +2213,8 @@ function handleTouchStart(event) {
     if (gameOver || paused) return;
     event.preventDefault();
     
-    // Track if multiple touches
-    if (event.touches.length > 1) {
-        multiTouchDetected = true;
-        return;
-    }
-    
-    multiTouchDetected = false;
+    // Only track single touches for gesture detection
+    if (event.touches.length > 1) return;
     
     // Store the initial touch position
     const touch = event.touches[0];
@@ -2232,7 +2230,7 @@ function handleTouchMove(event) {
     event.preventDefault();
     
     // Skip if it's a multi-touch gesture
-    if (multiTouchDetected || event.touches.length > 1) return;
+    if (event.touches.length > 1) return;
     
     const now = Date.now();
     
@@ -2278,18 +2276,6 @@ function handleTouchEnd(event) {
     if (gameOver || paused) return;
     event.preventDefault();
     
-    // Process two-finger tap
-    if (multiTouchDetected) {
-        // Choose either horizontal or vertical 3D rotation
-        if (Math.random() > 0.5) {
-            p.rotate3DX();
-        } else {
-            p.rotate3DY();
-        }
-        multiTouchDetected = false;
-        return;
-    }
-    
     const touchEndTime = Date.now();
     const touchDuration = touchEndTime - touchStartTime;
     
@@ -2300,23 +2286,70 @@ function handleTouchEnd(event) {
     
     // Check for tap (quick touch)
     if (touchDuration < TAP_THRESHOLD) {
-        // Check for double tap (for hard drop)
-        // Must be within time threshold AND close to the same position
-        const timeBetweenTaps = touchEndTime - lastTapTime;
-        const distanceBetweenTaps = Math.sqrt(
+        // Calculate distances between taps
+        const distanceFromLastTap = Math.sqrt(
             Math.pow(touchX - lastTapX, 2) + 
             Math.pow(touchY - lastTapY, 2)
         );
         
-        if (timeBetweenTaps < DOUBLE_TAP_THRESHOLD && distanceBetweenTaps < TAP_DISTANCE_THRESHOLD) {
-            p.hardDrop();
-            lastTapTime = 0; // Reset to prevent triple-tap detection
-        } else {
-            // Single tap rotates piece
-            p.rotate('right');
+        const distanceFromSecondLastTap = Math.sqrt(
+            Math.pow(touchX - secondLastTapX, 2) + 
+            Math.pow(touchY - secondLastTapY, 2)
+        );
+        
+        // Check for triple tap - all three taps must be close in position and time
+        if (touchEndTime - secondLastTapTime < TRIPLE_TAP_THRESHOLD && 
+            distanceFromLastTap < TAP_DISTANCE_THRESHOLD && 
+            distanceFromSecondLastTap < TAP_DISTANCE_THRESHOLD) {
+            
+            // Execute 3D rotation (randomly choose horizontal or vertical)
+            if (Math.random() > 0.5) {
+                p.rotate3DX();
+            } else {
+                p.rotate3DY();
+            }
+            
+            // Reset tap tracking after triple tap
+            secondLastTapTime = 0;
+            lastTapTime = 0;
+            return;
+        }
+        
+        // Check for double tap (for hard drop)
+        const timeBetweenTaps = touchEndTime - lastTapTime;
+        if (timeBetweenTaps < DOUBLE_TAP_THRESHOLD && distanceFromLastTap < TAP_DISTANCE_THRESHOLD) {
+            // Track second tap for potential triple tap
+            secondLastTapTime = lastTapTime;
+            secondLastTapX = lastTapX;
+            secondLastTapY = lastTapY;
+            
+            // Update last tap
             lastTapTime = touchEndTime;
             lastTapX = touchX;
             lastTapY = touchY;
+            
+            // If we already have a second tap recorded, this is too far from triple tap time
+            if (touchEndTime - secondLastTapTime > DOUBLE_TAP_THRESHOLD) {
+                p.hardDrop();
+                lastTapTime = 0;
+                secondLastTapTime = 0;
+            }
+        } else {
+            // Single tap - rotates piece and resets tap tracking
+            if (lastTapTime === 0) {
+                // First tap
+                p.rotate('right');
+                lastTapTime = touchEndTime;
+                lastTapX = touchX;
+                lastTapY = touchY;
+            } else {
+                // Too far from last tap position - treat as new first tap
+                p.rotate('right');
+                secondLastTapTime = 0;
+                lastTapTime = touchEndTime;
+                lastTapX = touchX;
+                lastTapY = touchY;
+            }
         }
     }
     
@@ -2324,7 +2357,7 @@ function handleTouchEnd(event) {
     touchIdentifier = null;
 }
 
-// Create on-screen control buttons for mobile
+// Create touch instructions overlay
 function createTouchControlButtons() {
     // Do not create buttons - using gesture-based controls only
     
@@ -2337,7 +2370,7 @@ function createTouchControlButtons() {
         <p><b>Swipe down:</b> Soft drop</p>
         <p><b>Tap anywhere:</b> Rotate right</p>
         <p><b>Double-tap:</b> Hard drop</p>
-        <p><b>Two-finger tap:</b> 3D rotate</p>
+        <p><b>Triple-tap:</b> 3D rotate</p>
     `;
     document.body.appendChild(touchInstructions);
     
