@@ -1,32 +1,72 @@
-# 3D Tetris
+# Tetris 3D
 
-A Tetris clone with 3D rotation capabilities, allowing pieces to be rotated in three dimensions.
+A modern take on the classic Tetris game with 3D rotation effects and animations. This game adds a new dimension to traditional Tetris gameplay by allowing tetromino pieces to be rotated and mirrored in 3D space.
+
+## Features
+
+- **3D Rotation Effects**: Experience Tetris with stunning 3D rotation animations
+- **Customizable Options**: Toggle 3D effects, spin animations, and adjust animation speed
+- **Responsive Controls**: Play with keyboard or gamepad
+- **Visual Effects**: Gradient colors, glow effects, and shadows
+- **Modern UI**: Clean, neon-styled interface with a space-themed background
+
+## Controls
+
+### Keyboard Controls
+
+- **A / ←**: Move Left
+- **D / →**: Move Right 
+- **S / ↓**: Move Down
+- **Q**: Rotate Left
+- **E**: Rotate Right
+- **W**: Horizontal 3D Rotation/Mirror
+- **X**: Vertical 3D Rotation/Mirror
+- **Space**: Hard Drop
+- **P**: Pause Game
+- **H**: Toggle Shadow
+
+### Gamepad Controls (if available)
+
+- **D-Pad Left/Right**: Move Left/Right
+- **D-Pad Down**: Move Down
+- **A Button**: Rotate Left
+- **B Button**: Rotate Right
+- **Y Button**: Horizontal 3D Rotation/Mirror
+- **X Button**: Vertical 3D Rotation/Mirror
+- **RT Button**: Hard Drop
+- **Start Button**: Pause Game
+
+## Options
+
+Access the options menu to customize your gameplay experience:
+
+- **3D Effects**: Enable/disable 3D rotation effects
+- **Spin Animations**: Enable/disable rotation animations
+- **Animation Speed**: Adjust how fast animations play
+
+## Technologies
+
+- HTML5
+- CSS3
+- JavaScript (Vanilla)
+- HTML5 Canvas for rendering
 
 ## How to Play
 
-1. Open `index.html` in your web browser to start the game.
-2. Use the following controls to play:
+1. Open the `index.html` file in a web browser
+2. Press the "New Game" button to start
+3. Use the keyboard controls to move and rotate pieces
+4. Clear lines by filling rows completely with blocks
+5. Try to achieve the highest score possible
 
-### Controls
-- **A/Left Arrow**: Move left
-- **D/Right Arrow**: Move right  
-- **S/Down Arrow**: Move down
-- **Q**: Rotate left (standard rotation)
-- **E**: Rotate right (standard rotation)
-- **W**: Horizontal 3D rotation
-- **X**: Vertical 3D rotation
-- **Space**: Hard drop
-- **P**: Pause/resume game
+## Live Demo
 
-## Game Features
+Visit [https://github.com/cmclark00/tetris-3d](https://github.com/cmclark00/tetris-3d) to access the repository.
 
-- Standard Tetris mechanics with line clearing and scoring
-- Unique 3D rotation abilities that let you rotate pieces horizontally and vertically
-- Increasing difficulty as you level up
-- Score tracking based on lines cleared and level
+## Credits
 
-## Implementation Details
+Developed by Corey Clark
 
-This game is built using vanilla HTML, CSS and JavaScript with HTML5 Canvas for rendering.
+## License
 
-The 3D aspect is simulated by having additional piece orientations that represent what the pieces would look like when rotated in 3D space. This gives the illusion of 3D movement while maintaining the 2D gameplay that makes Tetris fun and accessible. 
+This project is open source and available under the [MIT License](LICENSE). 
