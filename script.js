@@ -670,12 +670,25 @@ class Piece {
     
     // Hard drop
     hardDrop() {
+        // Skip if we're in the middle of an animation already
+        if (this.rotationTransition || this.showCompletionEffect) {
+            return;
+        }
+        
         // Cancel any ongoing rotations or animations
         this.rotationTransition = false;
         this.showCompletionEffect = false;
         this.rotationAngleX = 0;
         this.rotationAngleY = 0;
         this.rotationAngleZ = 0;
+        
+        // Clear rotation state completely
+        this.rotationDirection = null;
+        this.targetTetromino = null;
+        this.targetPattern = undefined;
+        this.targetKick = undefined;
+        this.originalTetromino = null;
+        this.rotationProgress = 0;
         
         // Clear previous position
         this.undraw();
@@ -2188,7 +2201,10 @@ function handleControllerAction(action) {
             p.mirrorVertical();
             break;
         case 'hardDrop':
-            p.hardDrop();
+            // Only perform hard drop if not in the middle of an animation
+            if (!p.rotationTransition && !p.showCompletionEffect) {
+                p.hardDrop();
+            }
             break;
         case 'pause':
             togglePause();
@@ -2409,13 +2425,13 @@ function handleTouchEnd(event) {
     const touchX = touch.clientX;
     const touchY = touch.clientY;
     
-    // Skip if we're in the middle of a rotation animation
-    if (p.rotationTransition || p.showCompletionEffect) {
+    // If a double tap is in progress, prevent further processing
+    if (doubleTapInProgress) {
         return;
     }
     
-    // If a double tap is in progress, prevent further processing
-    if (doubleTapInProgress) {
+    // Skip if we're in the middle of a rotation animation
+    if (p.rotationTransition || p.showCompletionEffect) {
         return;
     }
     
@@ -2434,8 +2450,10 @@ function handleTouchEnd(event) {
             // This is a double tap - perform hard drop
             doubleTapInProgress = true;
             
-            // Perform the hard drop
-            p.hardDrop();
+            // Perform the hard drop if not in an animation
+            if (!p.rotationTransition && !p.showCompletionEffect) {
+                p.hardDrop();
+            }
             
             // Reset tap tracking
             tapCount = 0;
