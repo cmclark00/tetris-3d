@@ -2182,14 +2182,17 @@ function clearPreviousPiecePosition() {
 let touchStartX = 0;
 let touchStartY = 0;
 let touchStartTime = 0;
-const SWIPE_THRESHOLD = 30;
+const SWIPE_THRESHOLD = 15; // Reduced threshold for more responsive movement
 const TAP_THRESHOLD = 200; // milliseconds
-const DOUBLE_TAP_THRESHOLD = 300; // milliseconds
+const DOUBLE_TAP_THRESHOLD = 400; // Increased to prevent accidental double-taps
 let lastTapTime = 0;
 let lastMoveTime = 0;
 let touchIdentifier = null;
 let multiTouchDetected = false;
-const MOVE_COOLDOWN = 100; // ms between moves to prevent too rapid movement
+const MOVE_COOLDOWN = 60; // Reduced cooldown for smoother movement
+let lastTapX = 0;
+let lastTapY = 0;
+const TAP_DISTANCE_THRESHOLD = 20; // Maximum distance to consider as same-position tap
 
 // Initialize touch controls
 function initTouchControls() {
@@ -2232,7 +2235,6 @@ function handleTouchMove(event) {
     if (multiTouchDetected || event.touches.length > 1) return;
     
     const now = Date.now();
-    if (now - lastMoveTime < MOVE_COOLDOWN) return;
     
     if (!event.touches.length) return;
     
@@ -2247,25 +2249,27 @@ function handleTouchMove(event) {
     const absX = Math.abs(diffX);
     const absY = Math.abs(diffY);
     
-    if (absX > SWIPE_THRESHOLD || absY > SWIPE_THRESHOLD) {
-        // Determine direction of swipe - if more horizontal than vertical
-        if (absX > absY) {
+    if (absX > SWIPE_THRESHOLD) {
+        // Horizontal movement has priority and a shorter cooldown
+        if (now - lastMoveTime >= MOVE_COOLDOWN) {
             if (diffX > 0) {
                 p.moveRight();
             } else {
                 p.moveLeft();
             }
-        } else {
-            // Only handle downward swipes for soft drop
-            if (diffY > 0) {
-                p.moveDown();
-            }
+            
+            // Reset touch start to allow for continuous movement
+            touchStartX = touch.clientX;
+            lastMoveTime = now;
         }
-        
-        // Reset touch start to allow for continuous movement
-        touchStartX = touch.clientX;
-        touchStartY = touch.clientY;
-        lastMoveTime = now;
+    } 
+    // Only handle downward swipes for soft drop - if no horizontal movement is detected
+    else if (absY > SWIPE_THRESHOLD * 2 && absY > absX && diffY > 0) {
+        if (now - lastMoveTime >= MOVE_COOLDOWN * 2) { // Use longer cooldown for down movement
+            p.moveDown();
+            touchStartY = touch.clientY;
+            lastMoveTime = now;
+        }
     }
 }
 
@@ -2289,16 +2293,30 @@ function handleTouchEnd(event) {
     const touchEndTime = Date.now();
     const touchDuration = touchEndTime - touchStartTime;
     
+    // Get touch coordinates
+    const touch = event.changedTouches[0];
+    const touchX = touch.clientX;
+    const touchY = touch.clientY;
+    
     // Check for tap (quick touch)
     if (touchDuration < TAP_THRESHOLD) {
         // Check for double tap (for hard drop)
-        if (touchEndTime - lastTapTime < DOUBLE_TAP_THRESHOLD) {
+        // Must be within time threshold AND close to the same position
+        const timeBetweenTaps = touchEndTime - lastTapTime;
+        const distanceBetweenTaps = Math.sqrt(
+            Math.pow(touchX - lastTapX, 2) + 
+            Math.pow(touchY - lastTapY, 2)
+        );
+        
+        if (timeBetweenTaps < DOUBLE_TAP_THRESHOLD && distanceBetweenTaps < TAP_DISTANCE_THRESHOLD) {
             p.hardDrop();
             lastTapTime = 0; // Reset to prevent triple-tap detection
         } else {
             // Single tap rotates piece
             p.rotate('right');
             lastTapTime = touchEndTime;
+            lastTapX = touchX;
+            lastTapY = touchY;
         }
     }
     
@@ -2314,11 +2332,12 @@ function createTouchControlButtons() {
     const touchInstructions = document.createElement('div');
     touchInstructions.className = 'touch-instructions';
     touchInstructions.innerHTML = `
-        <p>Swipe left/right: Move piece</p>
-        <p>Swipe down: Soft drop</p>
-        <p>Tap: Rotate right</p>
-        <p>Double tap: Hard drop</p>
-        <p>Two-finger tap: 3D rotate</p>
+        <h3>Touch Controls</h3>
+        <p><b>Swipe left/right:</b> Move piece</p>
+        <p><b>Swipe down:</b> Soft drop</p>
+        <p><b>Tap anywhere:</b> Rotate right</p>
+        <p><b>Double-tap:</b> Hard drop</p>
+        <p><b>Two-finger tap:</b> 3D rotate</p>
     `;
     document.body.appendChild(touchInstructions);
     
@@ -2326,9 +2345,36 @@ function createTouchControlButtons() {
     setTimeout(() => {
         touchInstructions.classList.add('fade-out');
         setTimeout(() => {
+            // Keep element in DOM but hidden, so it can be shown again later
+            touchInstructions.style.opacity = '0';
             touchInstructions.style.display = 'none';
         }, 1000);
     }, 5000);
+    
+    // Add instruction toggle button to score container
+    const instructionsBtn = document.createElement('button');
+    instructionsBtn.className = 'game-btn instructions-btn';
+    instructionsBtn.innerHTML = 'Controls';
+    instructionsBtn.addEventListener('click', function() {
+        // Show instructions again
+        touchInstructions.style.display = 'block';
+        touchInstructions.style.opacity = '1';
+        touchInstructions.classList.remove('fade-out');
+        
+        // Fade out after 5 seconds
+        setTimeout(() => {
+            touchInstructions.classList.add('fade-out');
+            setTimeout(() => {
+                touchInstructions.style.display = 'none';
+            }, 1000);
+        }, 5000);
+    });
+    
+    // Add button to score container
+    const scoreContainer = document.querySelector('.score-container');
+    if (scoreContainer) {
+        scoreContainer.appendChild(instructionsBtn);
+    }
 }
 
 // Set active piece to next piece and create new next piece

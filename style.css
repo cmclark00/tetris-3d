@@ -658,7 +658,7 @@ input[type=range]::-moz-range-thumb {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.9);
     border: 2px solid rgba(0, 255, 255, 0.7);
     border-radius: 10px;
     padding: 15px;
@@ -666,6 +666,14 @@ input[type=range]::-moz-range-thumb {
     box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
     transition: opacity 1s ease;
     text-align: center;
+    max-width: 90vw;
+}
+
+.touch-instructions h3 {
+    color: #00ffff;
+    text-shadow: 0 0 5px #00ffff, 0 0 10px #00ffff;
+    margin-bottom: 15px;
+    font-size: 16px;
 }
 
 .mobile-mode .touch-instructions {
@@ -674,10 +682,21 @@ input[type=range]::-moz-range-thumb {
 
 .touch-instructions p {
     margin: 10px 0;
-    font-size: 14px;
+    font-size: 13px;
     color: #fff;
+    text-align: left;
+}
+
+.touch-instructions p b {
+    color: #ff9900;
+    text-shadow: 0 0 5px rgba(255, 153, 0, 0.5);
 }
 
 .touch-instructions.fade-out {
     opacity: 0;
+}
+
+.instructions-btn {
+    margin-top: 15px;
+    background: linear-gradient(45deg, #ff9900, #ff5500);
 } 
