@@ -1,17 +1,3 @@
-// Performance optimization variables
-let lastTimestamp = 0;
-const FPS_LIMIT = 60; // Default FPS limit
-const MOBILE_FPS_LIMIT = 30; // Lower FPS on mobile
-let FRAME_MIN_TIME = (1000 / FPS_LIMIT); // Changed from const to let so it can be modified
-let isReducedEffects = false; // For mobile performance
-let maxFireworks = 30; // Default limit
-let maxParticlesPerFirework = 30; // Default limit
-
-// Add performance monitoring
-let frameCounter = 0;
-let lastFpsUpdate = 0;
-let currentFps = 0;
-
 // Get canvas and context
 const canvas = document.getElementById('tetris');
 const ctx = canvas.getContext('2d');
@@ -325,46 +311,7 @@ for (let i = 0; i < PIECES.length; i++) {
     PIECE_3D_ORIENTATIONS[i].push(verticalRotation);
 }
 
-// Load options from localStorage
-function loadOptions() {
-    const savedOptions = localStorage.getItem('tetris3DOptions');
-    if (savedOptions) {
-        const options = JSON.parse(savedOptions);
-        
-        enable3DEffects = options.enable3DEffects !== undefined ? options.enable3DEffects : true;
-        enableSpinAnimations = options.enableSpinAnimations !== undefined ? options.enableSpinAnimations : true;
-        animationSpeed = options.animationSpeed !== undefined ? options.animationSpeed : 0.05;
-        forceMobileControls = options.forceMobileControls !== undefined ? options.forceMobileControls : false;
-        
-        // Update UI controls
-        if (toggle3DEffects) toggle3DEffects.checked = enable3DEffects;
-        if (toggleSpinAnimations) toggleSpinAnimations.checked = enableSpinAnimations;
-        if (animationSpeedSlider) animationSpeedSlider.value = animationSpeed;
-        
-        if (toggleMobileControls) {
-            toggleMobileControls.checked = forceMobileControls;
-        }
-    }
-    
-    // Detect if we're on mobile and reduce effects automatically
-    if (isMobile) {
-        maxFireworks = 10;
-        maxParticlesPerFirework = 15;
-        isReducedEffects = true;
-    }
-}
-
-// Save options to localStorage
-function saveOptions() {
-    localStorage.setItem('tetris3DOptions', JSON.stringify({
-        enable3DEffects,
-        enableSpinAnimations,
-        animationSpeed,
-        forceMobileControls
-    }));
-}
-
-// Modify the Firework constructor to use the max particles limit
+// Firework class for visual effects
 class Firework {
     constructor(x, y) {
         this.x = x;
@@ -375,13 +322,8 @@ class Firework {
         this.isDone = false;
         this.colors = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
         
-        // Limit particles based on device capability
-        const particleCount = isReducedEffects ? 
-            Math.floor(Math.random() * 10) + 5 : 
-            Math.floor(Math.random() * maxParticlesPerFirework) + 10;
-            
-        // Create particles with limit
-        for (let i = 0; i < particleCount; i++) {
+        // Create particles
+        for (let i = 0; i < this.particleCount; i++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = Math.random() * 3 + 2;
             const size = Math.random() * 3 + 1;
@@ -1627,92 +1569,51 @@ function playLineClearSound(lineCount) {
 
 // Update game frame
 function update() {
-    // Remove old fireworks
-    fireworks = fireworks.filter(fw => !fw.done);
-    
-    // Only create new fireworks if we're below the limit and not on low-end devices
-    if (!gameOver && !paused) {
-        const maxAllowed = isReducedEffects ? maxFireworks/2 : maxFireworks;
-        const creationProbability = isReducedEffects ? 0.005 : 0.02; // Lower probability on mobile
+    // Update and draw fireworks
+    for (let i = fireworks.length - 1; i >= 0; i--) {
+        fireworks[i].update();
         
-        if (fireworks.length < maxAllowed && Math.random() < creationProbability) {
-            const x = Math.random() * canvas.width;
-            const y = Math.random() * canvas.height;
-            fireworks.push(new Firework(x, y));
-        }
-        
-        // Update active fireworks - only if not too many
-        const fireLimit = Math.min(fireworks.length, isReducedEffects ? 10 : fireworks.length);
-        for (let i = 0; i < fireLimit; i++) {
-            fireworks[i].update();
+        if (fireworks[i].isDone) {
+            fireworks.splice(i, 1);
         }
     }
     
-    // Continue the animation
+    // Request the next frame
     requestAnimationFrame(update);
 }
 
-// Draw game elements with frame limiting
+// Draw game elements
 function draw() {
-    if (gameOver || paused) return;
+    // Clear the entire canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Frame rate limiting
-    const now = performance.now();
-    const elapsed = now - lastTimestamp;
+    // Draw a border around the play area
+    ctx.strokeStyle = 'rgba(80, 80, 80, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0, 0, canvas.width, canvas.height);
     
-    // FPS monitoring
-    frameCounter++;
-    if (now - lastFpsUpdate > 1000) {
-        currentFps = frameCounter;
-        frameCounter = 0;
-        lastFpsUpdate = now;
-        
-        // Log FPS every second for debugging
-        if (isReducedEffects) {
-            console.log(`Current FPS: ${currentFps}`);
-        }
-    }
+    // Clear any previous piece positions
+    clearPreviousPiecePosition();
     
-    // Skip frames to maintain target FPS
-    if (elapsed < FRAME_MIN_TIME) {
-        requestAnimationFrame(draw);
-        return;
-    }
-    
-    lastTimestamp = now - (elapsed % FRAME_MIN_TIME);
-    
-    // Clear the canvas completely to make sure nothing is left over
-    ctx.fillStyle = EMPTY;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw the board - this shows locked pieces
+    // Draw the board - this shows only locked pieces
     drawBoard();
     
-    // Always draw the active piece if it exists
+    // Always draw the active piece
     if (p) {
         p.draw();
-    } else {
-        console.warn("No active piece to draw!");
     }
     
-    // Fireworks - limit on mobile
-    const shouldDrawFireworks = !isMobile || frameCounter % 2 === 0;
-    if (shouldDrawFireworks) {
-        // Draw fireworks with clipping for performance
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, 0, canvas.width, canvas.height);
-        ctx.clip();
-        
-        // Limit how many fireworks we draw
-        const fireworkLimit = isReducedEffects ? 5 : fireworks.length;
-        for (let i = 0; i < Math.min(fireworkLimit, fireworks.length); i++) {
-            fireworks[i].draw();
-        }
-        ctx.restore();
+    // Draw fireworks (clipped to canvas area)
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, canvas.width, canvas.height);
+    ctx.clip();
+    for (let i = 0; i < fireworks.length; i++) {
+        fireworks[i].draw();
     }
+    ctx.restore();
     
-    // Draw paused message if needed
+    // Draw messages if game is paused
     if (paused) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1722,24 +1623,615 @@ function draw() {
         ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
     }
     
+    // Request the next frame
     requestAnimationFrame(draw);
 }
 
-// Optimize touch events handling to avoid excessive processing
-// Add debounce for touch events
-let touchMoveDebounce = false;
+// Drop the piece - called by interval
+function dropPiece() {
+    if (gameOver || paused) return;
+    
+    let now = Date.now();
+    let delta = now - dropStart;
+    
+    // Drop speed depends on level
+    let speed = 1000 * (1 - (level - 1) * 0.1);
+    speed = Math.max(speed, 100); // Don't allow too fast drops (minimum 100ms)
+    
+    if (delta > speed) {
+        p.moveDown();
+        dropStart = now;
+        
+        // If we can't move down and we're still at the top, game over
+        if (p.collision(0, 1) && p.y < 1) {
+            gameOver = true;
+            showGameOver();
+        }
+    }
+    
+    if (!gameOver) requestAnimationFrame(draw);
+}
 
+// Show game over modal
+function showGameOver() {
+    clearInterval(gameInterval);
+    finalScoreElement.textContent = score;
+    gameOverModal.classList.add('active');
+}
+
+// Reset the game
+function resetGame() {
+    // Reset game variables
+    score = 0;
+    level = 1;
+    lines = 0;
+    gameOver = false;
+    paused = false;
+    
+    // Clear the board
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            board[r][c] = EMPTY;
+        }
+    }
+    
+    // Update UI
+    scoreElement.textContent = score;
+    levelElement.textContent = level;
+    linesElement.textContent = lines;
+    
+    // Close game over modal if open
+    gameOverModal.classList.remove('active');
+    
+    // Generate pieces
+    p = randomPiece();
+    nextPiece = randomPiece();
+    nextPiece.drawNextPiece();
+    
+    // Start the game interval
+    dropStart = Date.now();
+    clearInterval(gameInterval);
+    gameInterval = setInterval(dropPiece, 1000);
+}
+
+// Toggle pause
+function togglePause() {
+    paused = !paused;
+    
+    if (paused) {
+        clearInterval(gameInterval);
+        pauseBtn.textContent = "Resume";
+    } else {
+        gameInterval = setInterval(dropPiece, Math.max(100, 1000 - (level * 100)));
+        pauseBtn.textContent = "Pause";
+    }
+}
+
+// Toggle options modal
+function toggleOptionsModal() {
+    if (optionsModal.classList.contains('active')) {
+        optionsModal.classList.remove('active');
+    } else {
+        optionsModal.classList.add('active');
+    }
+}
+
+// Apply options settings
+function applyOptions() {
+    enable3DEffects = toggle3DEffects.checked;
+    enableSpinAnimations = toggleSpinAnimations.checked;
+    animationSpeed = parseFloat(animationSpeedSlider.value);
+    forceMobileControls = toggleMobileControls.checked;
+    
+    // Apply mobile controls if checked or if on mobile device
+    if (forceMobileControls) {
+        if (!touchControls) {
+            initTouchControls();
+            touchControls = true;
+        }
+        document.body.classList.add('mobile-mode');
+    } else if (!isMobile) {
+        document.body.classList.remove('mobile-mode');
+    }
+    
+    // Save options
+    saveOptions();
+}
+
+// Save options to localStorage
+function saveOptions() {
+    localStorage.setItem('tetris3DOptions', JSON.stringify({
+        enable3DEffects,
+        enableSpinAnimations,
+        animationSpeed,
+        forceMobileControls
+    }));
+}
+
+// Load options from localStorage
+function loadOptions() {
+    const savedOptions = localStorage.getItem('tetris3DOptions');
+    if (savedOptions) {
+        const options = JSON.parse(savedOptions);
+        
+        enable3DEffects = options.enable3DEffects !== undefined ? options.enable3DEffects : true;
+        enableSpinAnimations = options.enableSpinAnimations !== undefined ? options.enableSpinAnimations : true;
+        animationSpeed = options.animationSpeed !== undefined ? options.animationSpeed : 0.05;
+        forceMobileControls = options.forceMobileControls !== undefined ? options.forceMobileControls : false;
+        
+        // Update UI controls
+        toggle3DEffects.checked = enable3DEffects;
+        toggleSpinAnimations.checked = enableSpinAnimations;
+        animationSpeedSlider.value = animationSpeed;
+        
+        if (toggleMobileControls) {
+            toggleMobileControls.checked = forceMobileControls;
+        }
+    }
+}
+
+// Initialize game
+function init() {
+    // Reset canvas to ensure clean state
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Load saved options
+    loadOptions();
+    
+    // Draw the board
+    drawBoard();
+    
+    // Generate initial pieces
+    p = randomPiece();
+    nextPiece = randomPiece();
+    
+    // Draw initial next piece
+    nextPiece.drawNextPiece();
+    
+    // Set up game interval
+    dropStart = Date.now();
+    gameInterval = setInterval(dropPiece, 1000);
+    
+    // Listen for keyboard events
+    document.addEventListener('keydown', control);
+    
+    // Add resize listener for responsive layout
+    window.addEventListener('resize', handleResize);
+    
+    // Initial resize to set correct dimensions
+    handleResize();
+    
+    // Button event listeners
+    startBtn.addEventListener('click', resetGame);
+    pauseBtn.addEventListener('click', togglePause);
+    playAgainBtn.addEventListener('click', resetGame);
+    shadowBtn.addEventListener('click', toggleShadow);
+    optionsBtn.addEventListener('click', toggleOptionsModal);
+    optionsCloseBtn.addEventListener('click', toggleOptionsModal);
+    
+    // Options event listeners
+    toggle3DEffects.addEventListener('change', function() {
+        applyOptions();
+    });
+    
+    toggleSpinAnimations.addEventListener('change', function() {
+        applyOptions();
+    });
+    
+    animationSpeedSlider.addEventListener('input', function() {
+        applyOptions();
+    });
+    
+    if (toggleMobileControls) {
+        toggleMobileControls.addEventListener('change', function() {
+            applyOptions();
+            
+            // Force resize to update layout
+            window.dispatchEvent(new Event('resize'));
+        });
+    }
+    
+    // Apply mobile mode if forced or on mobile device
+    if (forceMobileControls || isMobile) {
+        if (!touchControls) {
+            initTouchControls();
+            touchControls = true;
+        }
+        document.body.classList.add('mobile-mode');
+    }
+    
+    // Initialize controller support
+    initControllerSupport();
+    
+    // Initial controller status update
+    updateControllerStatus();
+}
+
+// Handle window resize for responsive layout
+function handleResize() {
+    const gameContainer = document.querySelector('.game-container');
+    const gameWrapper = document.querySelector('.game-wrapper');
+    const scoreContainer = document.querySelector('.score-container');
+    
+    if (isMobile || forceMobileControls) {
+        // Scale the canvas to fit mobile screen
+        const viewportWidth = Math.min(window.innerWidth, document.documentElement.clientWidth);
+        const viewportHeight = Math.min(window.innerHeight, document.documentElement.clientHeight);
+        
+        // Detect orientation
+        const isPortrait = viewportHeight > viewportWidth;
+        
+        // Calculate available game area (accounting for UI elements)
+        const titleHeight = 40; // Estimate for title
+        const scoreWidth = isPortrait ? 120 : 100; // Width for score container in portrait/landscape
+        const availableWidth = viewportWidth - scoreWidth - 20; // Subtract score width + padding
+        const availableHeight = viewportHeight - titleHeight - 20; // Subtract title height + padding
+        
+        // Calculate optimal dimensions while maintaining aspect ratio
+        const gameRatio = ROWS / COLS;
+        
+        // Calculate scale based on available space
+        let targetWidth, targetHeight;
+        
+        if (isPortrait) {
+            // For portrait, prioritize fitting the width
+            targetWidth = availableWidth * 0.95;
+            targetHeight = targetWidth * gameRatio;
+            
+            // If too tall, scale down based on height
+            if (targetHeight > availableHeight * 0.95) {
+                targetHeight = availableHeight * 0.95;
+                targetWidth = targetHeight / gameRatio;
+            }
+        } else {
+            // For landscape, prioritize fitting the height
+            targetHeight = availableHeight * 0.95;
+            targetWidth = targetHeight / gameRatio;
+            
+            // If too wide, scale down based on width
+            if (targetWidth > availableWidth * 0.95) {
+                targetWidth = availableWidth * 0.95;
+                targetHeight = targetWidth * gameRatio;
+            }
+        }
+        
+        // Apply dimensions
+        canvas.style.width = `${targetWidth}px`;
+        canvas.style.height = `${targetHeight}px`;
+        
+        // Force a redraw of the nextPiece preview to fix rendering issues
+        if (nextPiece) {
+            setTimeout(() => {
+                nextPieceCtx.clearRect(0, 0, nextPieceCanvas.width, nextPieceCanvas.height);
+                nextPiece.drawNextPiece();
+            }, 100);
+        }
+        
+        // Show touch controls mode
+        document.body.classList.add('mobile-mode');
+    } else {
+        // Reset to desktop layout
+        canvas.style.width = '';
+        canvas.style.height = '';
+        
+        document.body.classList.remove('mobile-mode');
+    }
+}
+
+// Toggle shadow display
+function toggleShadow() {
+    showShadow = !showShadow;
+    if (!gameOver && !paused) {
+        // Redraw current piece to show/hide shadow
+        p.undraw();
+        p.draw();
+    }
+}
+
+// Controller support
+function initControllerSupport() {
+    // Check for existing gamepads
+    scanGamepads();
+    
+    // Listen for controller connection/disconnection
+    window.addEventListener('gamepadconnected', (e) => {
+        console.log('Gamepad connected:', e.gamepad.id);
+        gamepadConnected = true;
+        controllers[e.gamepad.index] = e.gamepad;
+        
+        // Start polling for controller input if not already
+        if (!controllerInterval) {
+            controllerInterval = setInterval(pollControllers, controllerPollingRate);
+        }
+        
+        // Show controller connected message
+        showControllerMessage(`Controller connected: ${e.gamepad.id}`);
+    });
+    
+    window.addEventListener('gamepaddisconnected', (e) => {
+        console.log('Gamepad disconnected:', e.gamepad.id);
+        delete controllers[e.gamepad.index];
+        
+        // Check if there are any controllers left
+        if (Object.keys(controllers).length === 0) {
+            gamepadConnected = false;
+            clearInterval(controllerInterval);
+            controllerInterval = null;
+        }
+        
+        // Show controller disconnected message
+        showControllerMessage('Controller disconnected');
+    });
+    
+    // Initial scan
+    if (Object.keys(controllers).length > 0) {
+        controllerInterval = setInterval(pollControllers, controllerPollingRate);
+    }
+}
+
+// Scan for connected gamepads
+function scanGamepads() {
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : 
+                    (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
+    
+    for (let i = 0; i < gamepads.length; i++) {
+        if (gamepads[i]) {
+            controllers[gamepads[i].index] = gamepads[i];
+            gamepadConnected = true;
+        }
+    }
+}
+
+// Poll controllers for input
+function pollControllers() {
+    if (!gamepadConnected || gameOver) return;
+    
+    // Get fresh gamepad data
+    scanGamepads();
+    
+    // Use the first available controller
+    const controller = controllers[Object.keys(controllers)[0]];
+    if (!controller) return;
+    
+    // Initialize state object if needed
+    if (!lastControllerState[controller.index]) {
+        lastControllerState[controller.index] = {
+            buttons: Array(controller.buttons.length).fill(false),
+            axes: Array(controller.axes.length).fill(0)
+        };
+    }
+    
+    // Check buttons
+    for (let action in controllerMapping) {
+        const buttonIndex = controllerMapping[action][0];
+        
+        // Handle button presses
+        if (buttonIndex >= 0 && buttonIndex < controller.buttons.length) {
+            const button = controller.buttons[buttonIndex];
+            const pressed = button.pressed || button.value > 0.5;
+            
+            // Check if this is a new press (wasn't pressed last time)
+            if (pressed && !lastControllerState[controller.index].buttons[buttonIndex]) {
+                // Handle controller action
+                handleControllerAction(action);
+            }
+            
+            // Update state
+            lastControllerState[controller.index].buttons[buttonIndex] = pressed;
+        }
+    }
+    
+    // Handle analog stick for movement
+    // Left stick horizontal
+    if (controller.axes[0] < -0.5 && lastControllerState[controller.index].axes[0] >= -0.5) {
+        handleControllerAction('left');
+    } 
+    else if (controller.axes[0] > 0.5 && lastControllerState[controller.index].axes[0] <= 0.5) {
+        handleControllerAction('right');
+    }
+    
+    // Left stick vertical
+    if (controller.axes[1] > 0.5 && lastControllerState[controller.index].axes[1] <= 0.5) {
+        handleControllerAction('down');
+    }
+    
+    // Update axes state
+    lastControllerState[controller.index].axes = [...controller.axes];
+}
+
+// Handle controller actions
+function handleControllerAction(action) {
+    if (paused && action !== 'pause') return;
+    
+    switch(action) {
+        case 'left':
+            p.moveLeft();
+            break;
+        case 'right':
+            p.moveRight();
+            break;
+        case 'down':
+            p.moveDown();
+            break;
+        case 'rotateLeft':
+            p.rotate('left');
+            break;
+        case 'rotateRight':
+            p.rotate('right');
+            break;
+        case 'mirrorH':
+            p.mirrorHorizontal();
+            break;
+        case 'mirrorV':
+            p.mirrorVertical();
+            break;
+        case 'hardDrop':
+            p.hardDrop();
+            break;
+        case 'pause':
+            togglePause();
+            break;
+    }
+}
+
+// Show controller message
+function showControllerMessage(message) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'controller-message';
+    messageDiv.textContent = message;
+    document.body.appendChild(messageDiv);
+    
+    // Remove after a delay
+    setTimeout(() => {
+        messageDiv.classList.add('fade-out');
+        setTimeout(() => {
+            document.body.removeChild(messageDiv);
+        }, 500);
+    }, 3000);
+    
+    // Update controller status indicator
+    updateControllerStatus();
+}
+
+// Update controller status indicator
+function updateControllerStatus() {
+    if (gamepadConnected && Object.keys(controllers).length > 0) {
+        const controller = controllers[Object.keys(controllers)[0]];
+        controllerStatus.textContent = `Controller Connected: ${controller.id.slice(0, 20)}...`;
+        controllerStatus.classList.remove('disconnected');
+        controllerStatus.classList.add('connected');
+    } else {
+        controllerStatus.textContent = 'No Controller Detected';
+        controllerStatus.classList.remove('connected');
+        controllerStatus.classList.add('disconnected');
+    }
+}
+
+// The control function
+function control(event) {
+    if (gameOver) return;
+    if (paused && event.keyCode !== 80) return; // Allow only P key if paused
+    
+    switch(event.keyCode) {
+        case 37: // Left arrow
+        case 65: // A key
+            p.moveLeft();
+            break;
+        case 38: // Up arrow - no function
+            break;
+        case 39: // Right arrow
+        case 68: // D key
+            p.moveRight();
+            break;
+        case 40: // Down arrow
+        case 83: // S key
+            p.moveDown();
+            break;
+        case 81: // Q key - rotate left
+            p.rotate('left');
+            break;
+        case 69: // E key - rotate right
+            p.rotate('right');
+            break;
+        case 87: // W key - 3D vertical rotation
+            p.rotate3DX();
+            break;
+        case 88: // X key - 3D horizontal rotation
+            p.rotate3DY();
+            break;
+        case 32: // Space bar - hard drop
+            p.hardDrop();
+            break;
+        case 80: // P key - pause
+            togglePause();
+            break;
+        case 72: // H key - toggle shadow
+            toggleShadow();
+            break;
+    }
+}
+
+// Maintain a reference to the active piece's previous position for proper clearing
+let previousPiecePosition = {
+    x: 0,
+    y: 0,
+    shape: null,
+    exists: false
+};
+
+// Always clear previous piece position before drawing new position
+function clearPreviousPiecePosition() {
+    if (previousPiecePosition.exists && previousPiecePosition.shape) {
+        // Clear entire previous area with padding
+        const padding = 5;
+        const minX = Math.max(0, previousPiecePosition.x - padding);
+        const maxX = Math.min(COLS - 1, previousPiecePosition.x + previousPiecePosition.shape[0].length + padding);
+        const minY = Math.max(0, previousPiecePosition.y - padding);
+        const maxY = Math.min(ROWS - 1, previousPiecePosition.y + previousPiecePosition.shape.length + padding);
+        
+        for (let r = minY; r <= maxY; r++) {
+            for (let c = minX; c <= maxX; c++) {
+                if (r >= 0 && c >= 0 && r < ROWS && c < COLS && board[r][c] === EMPTY) {
+                    drawSquare(c, r, EMPTY);
+                }
+            }
+        }
+    }
+}
+
+// Touch control variables
+let touchStartX = 0;
+let touchStartY = 0;
+let touchStartTime = 0;
+const SWIPE_THRESHOLD = 15; // Reduced threshold for more responsive movement
+const TAP_THRESHOLD = 200; // milliseconds
+const DOUBLE_TAP_THRESHOLD = 400; // Increased to prevent accidental double-taps
+const TRIPLE_TAP_THRESHOLD = 600; // Maximum time between first and third tap
+let lastTapTime = 0;
+let secondLastTapTime = 0; // Track time of second-to-last tap for triple tap detection
+let lastMoveTime = 0;
+let touchIdentifier = null;
+let lastTapX = 0;
+let lastTapY = 0;
+let secondLastTapX = 0; // Track position of second-to-last tap
+let secondLastTapY = 0; // Track position of second-to-last tap
+const TAP_DISTANCE_THRESHOLD = 20; // Maximum distance to consider as same-position tap
+const MOVE_COOLDOWN = 60; // Cooldown between moves to prevent too rapid movement
+
+// Initialize touch controls
+function initTouchControls() {
+    // Add touch event listeners to the canvas
+    canvas.addEventListener('touchstart', handleTouchStart, false);
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd, false);
+    
+    // Create on-screen control buttons
+    createTouchControlButtons();
+}
+
+// Handle touch start event
+function handleTouchStart(event) {
+    if (gameOver || paused) return;
+    event.preventDefault();
+    
+    // Only track single touches for gesture detection
+    if (event.touches.length > 1) return;
+    
+    // Store the initial touch position
+    const touch = event.touches[0];
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+    touchStartTime = Date.now();
+    touchIdentifier = touch.identifier;
+}
+
+// Handle touch move event
 function handleTouchMove(event) {
     if (gameOver || paused) return;
     event.preventDefault();
     
     // Skip if it's a multi-touch gesture
     if (event.touches.length > 1) return;
-    
-    // Add debounce to reduce excessive processing
-    if (touchMoveDebounce) return;
-    touchMoveDebounce = true;
-    setTimeout(() => { touchMoveDebounce = false; }, 16); // ~60fps
     
     const now = Date.now();
     
@@ -1778,22 +2270,6 @@ function handleTouchMove(event) {
             lastMoveTime = now;
         }
     }
-}
-
-// Handle touch start event
-function handleTouchStart(event) {
-    if (gameOver || paused) return;
-    event.preventDefault();
-    
-    // Only track single touches for gesture detection
-    if (event.touches.length > 1) return;
-    
-    // Store the initial touch position
-    const touch = event.touches[0];
-    touchStartX = touch.clientX;
-    touchStartY = touch.clientY;
-    touchStartTime = Date.now();
-    touchIdentifier = touch.identifier;
 }
 
 // Handle touch end event
@@ -1842,39 +2318,40 @@ function handleTouchEnd(event) {
         
         // Check for double tap (for hard drop)
         const timeBetweenTaps = touchEndTime - lastTapTime;
-        
-        if (lastTapTime > 0 && timeBetweenTaps < DOUBLE_TAP_THRESHOLD && distanceFromLastTap < TAP_DISTANCE_THRESHOLD) {
-            // This is a double-tap, do hard drop
-            p.hardDrop();
-            
-            // Store for potential triple tap
+        if (timeBetweenTaps < DOUBLE_TAP_THRESHOLD && distanceFromLastTap < TAP_DISTANCE_THRESHOLD) {
+            // Track second tap for potential triple tap
             secondLastTapTime = lastTapTime;
             secondLastTapX = lastTapX;
             secondLastTapY = lastTapY;
+            
+            // Update last tap
             lastTapTime = touchEndTime;
             lastTapX = touchX;
             lastTapY = touchY;
             
-            // Debug
-            console.log("Double tap detected - hard drop");
-            return;
-        } 
-        
-        // Single tap - rotates piece
-        p.rotate('right');
-        
-        // Update tracking for potential double/triple tap
-        if (lastTapTime > 0) {
-            // Store previous tap data
-            secondLastTapTime = lastTapTime;
-            secondLastTapX = lastTapX;
-            secondLastTapY = lastTapY;
+            // If we already have a second tap recorded, this is too far from triple tap time
+            if (touchEndTime - secondLastTapTime > DOUBLE_TAP_THRESHOLD) {
+                p.hardDrop();
+                lastTapTime = 0;
+                secondLastTapTime = 0;
+            }
+        } else {
+            // Single tap - rotates piece and resets tap tracking
+            if (lastTapTime === 0) {
+                // First tap
+                p.rotate('right');
+                lastTapTime = touchEndTime;
+                lastTapX = touchX;
+                lastTapY = touchY;
+            } else {
+                // Too far from last tap position - treat as new first tap
+                p.rotate('right');
+                secondLastTapTime = 0;
+                lastTapTime = touchEndTime;
+                lastTapX = touchX;
+                lastTapY = touchY;
+            }
         }
-        
-        // Set current tap as the last tap
-        lastTapTime = touchEndTime;
-        lastTapX = touchX;
-        lastTapY = touchY;
     }
     
     // Reset touch identifier
@@ -2028,15 +2505,7 @@ function getNextPieceFromBag() {
 
 // Start the game
 window.onload = function() {
-    // Initialize the game
     init();
-    
-    // Apply mobile optimizations only for mobile devices
-    if (isMobile) {
-        optimizeForMobile();
-    }
-    
-    // Start animation loops
     update(); // Start the fireworks update loop
     draw();   // Start the drawing loop
     
@@ -2048,187 +2517,4 @@ window.onload = function() {
         // Force resize to ensure proper mobile layout
         window.dispatchEvent(new Event('resize'));
     }
-};
-
-// Add a mobile-specific optimization function to call on game initialization
-function optimizeForMobile() {
-    if (isMobile) {
-        // Reduce effects
-        isReducedEffects = true;
-        maxFireworks = 5;
-        maxParticlesPerFirework = 10;
-        
-        // Use lower frame rate for mobile - update global variable
-        FRAME_MIN_TIME = (1000 / MOBILE_FPS_LIMIT);
-        
-        // Reduce shadow complexity
-        showShadow = false; // Start with shadow off on mobile for performance
-        
-        console.log("Applying mobile optimizations");
-    }
-}
-
-// Add cleanup function to prevent memory leaks
-function cleanup() {
-    // Clear any large arrays that might be causing memory issues
-    fireworks = fireworks.slice(0, Math.min(fireworks.length, maxFireworks));
-    
-    // Force garbage collection hints
-    if (window.gc) window.gc();
-    
-    console.log("Memory cleanup performed");
-}
-
-// Call cleanup periodically on mobile devices
-if (isMobile) {
-    setInterval(cleanup, 60000); // Cleanup every minute
-}
-
-// Initialize game
-function init() {
-    // Reset game variables
-    score = 0;
-    level = 1;
-    lines = 0;
-    gameOver = false;
-    paused = false;
-    
-    // Clear the board
-    for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-            board[r][c] = EMPTY;
-        }
-    }
-    
-    // Update UI
-    scoreElement.textContent = score;
-    levelElement.textContent = level;
-    linesElement.textContent = lines;
-    
-    // Reset canvas to ensure clean state
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    nextPieceCtx.clearRect(0, 0, nextPieceCanvas.width, nextPieceCanvas.height);
-    
-    // Load saved options
-    loadOptions();
-    
-    // Draw the board
-    drawBoard();
-    
-    // Generate initial pieces
-    p = randomPiece();
-    nextPiece = randomPiece();
-    
-    // Draw initial next piece
-    nextPiece.drawNextPiece();
-    
-    // Set up game interval
-    dropStart = Date.now();
-    gameInterval = setInterval(dropPiece, 1000);
-    
-    // Listen for keyboard events
-    document.addEventListener('keydown', control);
-    
-    // Force immediate draw to show pieces
-    draw();
-    
-    console.log("Game initialized with new pieces");
-}
-
-// Drop the piece - called by interval
-function dropPiece() {
-    if (gameOver || paused) return;
-    
-    let now = Date.now();
-    let delta = now - dropStart;
-    
-    // Drop speed depends on level
-    let speed = 1000 * (1 - (level - 1) * 0.1);
-    speed = Math.max(speed, 100); // Don't allow too fast drops (minimum 100ms)
-    
-    if (delta > speed) {
-        p.moveDown();
-        dropStart = now;
-        
-        // If we can't move down and we're still at the top, game over
-        if (p.collision(0, 1) && p.y < 1) {
-            gameOver = true;
-            showGameOver();
-        }
-    }
-}
-
-// Show game over modal
-function showGameOver() {
-    clearInterval(gameInterval);
-    finalScoreElement.textContent = score;
-    gameOverModal.classList.add('active');
-    console.log("Game over!");
-}
-
-// The control function
-function control(event) {
-    if (gameOver) return;
-    if (paused && event.keyCode !== 80) return; // Allow only P key if paused
-    
-    switch(event.keyCode) {
-        case 37: // Left arrow
-        case 65: // A key
-            p.moveLeft();
-            break;
-        case 38: // Up arrow - no function
-            break;
-        case 39: // Right arrow
-        case 68: // D key
-            p.moveRight();
-            break;
-        case 40: // Down arrow
-        case 83: // S key
-            p.moveDown();
-            break;
-        case 81: // Q key - rotate left
-            p.rotate('left');
-            break;
-        case 69: // E key - rotate right
-            p.rotate('right');
-            break;
-        case 87: // W key - 3D vertical rotation
-            p.rotate3DX();
-            break;
-        case 88: // X key - 3D horizontal rotation
-            p.rotate3DY();
-            break;
-        case 32: // Space bar - hard drop
-            p.hardDrop();
-            break;
-        case 80: // P key - pause
-            togglePause();
-            break;
-        case 72: // H key - toggle shadow
-            toggleShadow();
-            break;
-    }
-}
-
-// Toggle pause
-function togglePause() {
-    paused = !paused;
-    
-    if (paused) {
-        clearInterval(gameInterval);
-        pauseBtn.textContent = "Resume";
-    } else {
-        gameInterval = setInterval(dropPiece, Math.max(100, 1000 - (level * 100)));
-        pauseBtn.textContent = "Pause";
-    }
-}
-
-// Toggle shadow display
-function toggleShadow() {
-    showShadow = !showShadow;
-    if (!gameOver && !paused) {
-        // Redraw current piece to show/hide shadow
-        p.undraw();
-        p.draw();
-    }
-} 
+}; 
