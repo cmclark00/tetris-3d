@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Tetris</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="stars"></div>
+    <div class="twinkling"></div>
+    
+    <h1 class="game-title">3D TETRIS</h1>
+    
+    <div class="game-container">
+        <div class="score-container">
+            <p>Score: <span id="score">0</span></p>
+            <p>Level: <span id="level">1</span></p>
+            <p>Lines: <span id="lines">0</span></p>
+            <button id="start-btn" class="game-btn">New Game</button>
+            <button id="pause-btn" class="game-btn">Pause</button>
+            <button id="shadow-btn" class="game-btn">Toggle Shadow</button>
+            <button id="options-btn" class="game-btn">Options</button>
+        </div>
+        
+        <div class="game-wrapper">
+            <canvas id="tetris" width="320" height="640"></canvas>
+            <div id="next-piece-preview">
+                <h3>Next</h3>
+                <canvas id="next-piece" width="120" height="120"></canvas>
+            </div>
+        </div>
+        
+        <div class="controls-info">
+            <h3>Keyboard Controls</h3>
+            <p><span class="key">A</span> / <span class="key">←</span> Move Left</p>
+            <p><span class="key">D</span> / <span class="key">→</span> Move Right</p>
+            <p><span class="key">S</span> / <span class="key">↓</span> Move Down</p>
+            <p><span class="key">Q</span> Rotate Left</p>
+            <p><span class="key">E</span> Rotate Right</p>
+            <p><span class="key">W</span> Horizontal 3D</p>
+            <p><span class="key">X</span> Vertical 3D</p>
+            <p><span class="key">Space</span> Hard Drop</p>
+            <p><span class="key">P</span> Pause Game</p>
+            <p><span class="key">H</span> Toggle Shadow</p>
+            
+            <h3 class="mt-4">Controller</h3>
+            <div id="controller-status" class="controller-indicator disconnected">
+                No Controller Detected
+            </div>
+            <div id="controller-mapping" class="mt-2">
+                <p><span class="ctrl">D-Pad ←/→</span> Move Left/Right</p>
+                <p><span class="ctrl">D-Pad ↓</span> Move Down</p>
+                <p><span class="ctrl">A</span> Rotate Left</p>
+                <p><span class="ctrl">B</span> Rotate Right</p>
+                <p><span class="ctrl">Y</span> Horizontal 3D</p>
+                <p><span class="ctrl">X</span> Vertical 3D</p>
+                <p><span class="ctrl">RT</span> Hard Drop</p>
+                <p><span class="ctrl">Start</span> Pause Game</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Audio elements for game sounds -->
+    <audio id="move-sound" src="https://assets.mixkit.co/sfx/preview/mixkit-video-game-retro-click-237.mp3" preload="auto"></audio>
+    <audio id="rotate-sound" src="https://assets.mixkit.co/sfx/preview/mixkit-arcade-mechanical-bling-210.mp3" preload="auto"></audio>
+    <audio id="drop-sound" src="https://assets.mixkit.co/sfx/preview/mixkit-arcade-retro-jumping-223.mp3" preload="auto"></audio>
+    
+    <!-- Game Over Modal -->
+    <div id="game-over-modal" class="modal">
+        <div class="modal-content">
+            <h2>GAME OVER</h2>
+            <p>Your Score: <span id="final-score">0</span></p>
+            <button id="play-again-btn" class="game-btn">Play Again</button>
+        </div>
+    </div>
+    
+    <!-- Options Modal -->
+    <div id="options-modal" class="modal">
+        <div class="modal-content">
+            <h2>OPTIONS</h2>
+            <div class="option-row">
+                <label>3D Effects: </label>
+                <label class="switch">
+                    <input type="checkbox" id="toggle-3d-effects" checked>
+                    <span class="slider round"></span>
+                </label>
+            </div>
+            <div class="option-row">
+                <label>Spin Animations: </label>
+                <label class="switch">
+                    <input type="checkbox" id="toggle-spin-animations" checked>
+                    <span class="slider round"></span>
+                </label>
+            </div>
+            <div class="option-row">
+                <label>Animation Speed: </label>
+                <input type="range" id="animation-speed" min="0.01" max="0.2" step="0.01" value="0.05">
+            </div>
+            <button id="options-close-btn" class="game-btn">Close</button>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html> 
