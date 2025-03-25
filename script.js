@@ -2,7 +2,7 @@
 let lastTimestamp = 0;
 const FPS_LIMIT = 60; // Default FPS limit
 const MOBILE_FPS_LIMIT = 30; // Lower FPS on mobile
-const FRAME_MIN_TIME = (1000 / FPS_LIMIT);
+let FRAME_MIN_TIME = (1000 / FPS_LIMIT); // Changed from const to let so it can be modified
 let isReducedEffects = false; // For mobile performance
 let maxFireworks = 30; // Default limit
 let maxParticlesPerFirework = 30; // Default limit
@@ -1647,15 +1647,14 @@ function draw() {
     }
     
     // Skip frames to maintain target FPS
-    const frameTime = isMobile ? (1000 / MOBILE_FPS_LIMIT) : FRAME_MIN_TIME;
-    if (elapsed < frameTime) {
+    if (elapsed < FRAME_MIN_TIME) {
         requestAnimationFrame(draw);
         return;
     }
     
-    lastTimestamp = now - (elapsed % frameTime);
+    lastTimestamp = now - (elapsed % FRAME_MIN_TIME);
     
-    // Only clear what's needed
+    // Clear canvas
     ctx.fillStyle = EMPTY;
     ctx.fillRect(0, 0, COLS * BLOCK_SIZE, ROWS * BLOCK_SIZE);
     
@@ -1667,9 +1666,10 @@ function draw() {
         p.draw();
     }
     
-    // On mobile, render fireworks less frequently
-    if (!isMobile || frameCounter % 2 === 0) {
-        // Draw fireworks (with clipping for performance)
+    // Fireworks - limit on mobile
+    const shouldDrawFireworks = !isMobile || frameCounter % 2 === 0;
+    if (shouldDrawFireworks) {
+        // Draw fireworks with clipping for performance
         ctx.save();
         ctx.beginPath();
         ctx.rect(0, 0, canvas.width, canvas.height);
@@ -2002,8 +2002,10 @@ window.onload = function() {
     // Initialize the game
     init();
     
-    // Apply mobile optimizations
-    optimizeForMobile();
+    // Apply mobile optimizations only for mobile devices
+    if (isMobile) {
+        optimizeForMobile();
+    }
     
     // Start animation loops
     update(); // Start the fireworks update loop
