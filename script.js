@@ -579,6 +579,11 @@ class Piece {
         // Direction can be 'right' or 'left'
         if (gameOver || paused) return;
         
+        // Square piece (O) doesn't rotate
+        if (this.tetrominoType === 'O') {
+            return;
+        }
+        
         // Clear previous position
         this.undraw();
         clearPreviousPiecePosition();
@@ -692,6 +697,11 @@ class Piece {
     
     // 3D horizontal rotation effect (around Y axis)
     rotate3DY() {
+        // Square pieces (O) shouldn't rotate
+        if (this.tetrominoType === 'O') {
+            return;
+        }
+        
         // Clear previous position
         this.undraw();
         clearPreviousPiecePosition();
@@ -748,6 +758,11 @@ class Piece {
     
     // 3D vertical rotation effect (around X axis)
     rotate3DX() {
+        // Square pieces (O) shouldn't rotate
+        if (this.tetrominoType === 'O') {
+            return;
+        }
+        
         // Clear previous position
         this.undraw();
         clearPreviousPiecePosition();
@@ -2410,6 +2425,11 @@ function handleTouchEnd(event) {
 
 // Create touch instructions overlay
 function createTouchControlButtons() {
+    // Check if elements already exist
+    if (document.querySelector('.rotate-buttons')) {
+        return;
+    }
+    
     // Create 3D rotation buttons
     const rotateButtons = document.createElement('div');
     rotateButtons.className = 'rotate-buttons';
@@ -2434,78 +2454,83 @@ function createTouchControlButtons() {
         }
     });
     
-    // Create touch instructions overlay
-    const touchInstructions = document.createElement('div');
-    touchInstructions.className = 'touch-instructions';
-    touchInstructions.innerHTML = `
-        <h3>Touch Controls</h3>
-        <p><b>Swipe left/right:</b> Move piece</p>
-        <p><b>Swipe down:</b> Soft drop</p>
-        <p><b>Tap anywhere:</b> Rotate right</p>
-        <p><b>Double-tap:</b> Hard drop</p>
-        <p><b>3D Flip Buttons:</b> Rotate in 3D</p>
-    `;
-    document.body.appendChild(touchInstructions);
-    
-    // Show instructions briefly, then fade out
-    setTimeout(() => {
-        touchInstructions.classList.add('fade-out');
-        setTimeout(() => {
-            // Keep element in DOM but hidden, so it can be shown again later
-            touchInstructions.style.opacity = '0';
-            touchInstructions.style.display = 'none';
-        }, 1000);
-    }, 5000);
-    
-    // Add instruction toggle button to score container
-    const instructionsBtn = document.createElement('button');
-    instructionsBtn.className = 'game-btn instructions-btn';
-    instructionsBtn.innerHTML = 'Controls';
-    instructionsBtn.addEventListener('click', function() {
-        // Show instructions again
-        touchInstructions.style.display = 'block';
-        touchInstructions.style.opacity = '1';
-        touchInstructions.classList.remove('fade-out');
+    // Create touch instructions overlay if it doesn't exist
+    if (!document.querySelector('.touch-instructions')) {
+        const touchInstructions = document.createElement('div');
+        touchInstructions.className = 'touch-instructions';
+        touchInstructions.innerHTML = `
+            <h3>Touch Controls</h3>
+            <p><b>Swipe left/right:</b> Move piece</p>
+            <p><b>Swipe down:</b> Soft drop</p>
+            <p><b>Tap anywhere:</b> Rotate right</p>
+            <p><b>Double-tap:</b> Hard drop</p>
+            <p><b>3D Flip Buttons:</b> Rotate in 3D</p>
+        `;
+        document.body.appendChild(touchInstructions);
         
-        // Fade out after 5 seconds
+        // Show instructions briefly, then fade out
         setTimeout(() => {
             touchInstructions.classList.add('fade-out');
             setTimeout(() => {
+                // Keep element in DOM but hidden, so it can be shown again later
+                touchInstructions.style.opacity = '0';
                 touchInstructions.style.display = 'none';
             }, 1000);
         }, 5000);
-    });
+    }
     
-    // Add button to score container
+    // Add instruction toggle button to score container if it doesn't exist
     const scoreContainer = document.querySelector('.score-container');
-    if (scoreContainer) {
+    if (scoreContainer && !document.querySelector('.instructions-btn')) {
+        const instructionsBtn = document.createElement('button');
+        instructionsBtn.className = 'game-btn instructions-btn';
+        instructionsBtn.innerHTML = 'Controls';
+        instructionsBtn.addEventListener('click', function() {
+            // Show instructions again
+            const touchInstructions = document.querySelector('.touch-instructions');
+            if (touchInstructions) {
+                touchInstructions.style.display = 'block';
+                touchInstructions.style.opacity = '1';
+                touchInstructions.classList.remove('fade-out');
+                
+                // Fade out after 5 seconds
+                setTimeout(() => {
+                    touchInstructions.classList.add('fade-out');
+                    setTimeout(() => {
+                        touchInstructions.style.display = 'none';
+                    }, 1000);
+                }, 5000);
+            }
+        });
+        
+        // Add button to score container
         scoreContainer.appendChild(instructionsBtn);
     }
     
-    // Add performance mode toggle
-    const perfToggle = document.createElement('input');
-    perfToggle.type = 'checkbox';
-    perfToggle.id = 'toggle-mobile-performance';
-    perfToggle.checked = mobilePerformanceMode;
-    
-    const perfLabel = document.createElement('label');
-    perfLabel.htmlFor = 'toggle-mobile-performance';
-    perfLabel.textContent = 'Perf Mode';
-    perfLabel.className = 'perf-label';
-    
-    const perfContainer = document.createElement('div');
-    perfContainer.className = 'perf-toggle';
-    perfContainer.appendChild(perfToggle);
-    perfContainer.appendChild(perfLabel);
-    
-    if (scoreContainer) {
+    // Add performance mode toggle if it doesn't exist
+    if (scoreContainer && !document.querySelector('.perf-toggle')) {
+        const perfToggle = document.createElement('input');
+        perfToggle.type = 'checkbox';
+        perfToggle.id = 'toggle-mobile-performance';
+        perfToggle.checked = mobilePerformanceMode;
+        
+        const perfLabel = document.createElement('label');
+        perfLabel.htmlFor = 'toggle-mobile-performance';
+        perfLabel.textContent = 'Perf Mode';
+        perfLabel.className = 'perf-label';
+        
+        const perfContainer = document.createElement('div');
+        perfContainer.className = 'perf-toggle';
+        perfContainer.appendChild(perfToggle);
+        perfContainer.appendChild(perfLabel);
+        
         scoreContainer.appendChild(perfContainer);
+        
+        // Add event listener
+        perfToggle.addEventListener('change', function() {
+            mobilePerformanceMode = this.checked;
+        });
     }
-    
-    // Add event listener
-    perfToggle.addEventListener('change', function() {
-        mobilePerformanceMode = this.checked;
-    });
 }
 
 // Set active piece to next piece and create new next piece
