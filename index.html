@@ -80,32 +80,34 @@
     <!-- Options Modal -->
     <div id="options-modal" class="modal">
         <div class="modal-content">
-            <h2>OPTIONS</h2>
+            <h2>Game Options</h2>
+            
             <div class="option-row">
-                <label>3D Effects: </label>
-                <label class="switch">
-                    <input type="checkbox" id="toggle-3d-effects" checked>
-                    <span class="slider round"></span>
-                </label>
+                <label for="toggle-3d-effects">Enable 3D Effects</label>
+                <input type="checkbox" id="toggle-3d-effects" checked>
             </div>
+            
             <div class="option-row">
-                <label>Spin Animations: </label>
-                <label class="switch">
-                    <input type="checkbox" id="toggle-spin-animations" checked>
-                    <span class="slider round"></span>
-                </label>
+                <label for="toggle-spin-animations">Enable Spin Animations</label>
+                <input type="checkbox" id="toggle-spin-animations" checked>
             </div>
+            
             <div class="option-row">
-                <label>Animation Speed: </label>
-                <input type="range" id="animation-speed" min="0.01" max="0.2" step="0.01" value="0.05">
+                <label for="animation-speed">Animation Speed</label>
+                <input type="range" id="animation-speed" min="0.01" max="0.1" step="0.01" value="0.05">
             </div>
+            
+            <div class="option-row mobile-only">
+                <label for="toggle-mobile-controls">Force Mobile Controls</label>
+                <input type="checkbox" id="toggle-mobile-controls">
+            </div>
+            
             <div class="option-row">
-                <label>Mobile Controls: </label>
-                <label class="switch">
-                    <input type="checkbox" id="toggle-mobile-controls">
-                    <span class="slider round"></span>
-                </label>
+                <label for="toggle-mobile-performance">Performance Mode</label>
+                <input type="checkbox" id="toggle-mobile-performance">
+                <span class="tooltip">Reduces visual effects for better performance on mobile devices</span>
             </div>
+            
             <button id="options-close-btn" class="game-btn">Close</button>
         </div>
     </div>

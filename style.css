@@ -249,7 +249,7 @@ canvas {
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.8);
     z-index: 100;
     justify-content: center;
     align-items: center;
@@ -260,25 +260,23 @@ canvas {
 }
 
 .modal-content {
-    background: rgba(0, 0, 0, 0.9);
-    padding: 30px;
+    background: rgba(10, 10, 20, 0.85);
+    border: 2px solid rgba(0, 255, 255, 0.6);
     border-radius: 10px;
+    color: white;
+    padding: 20px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 0 30px rgba(0, 255, 255, 0.5);
     text-align: center;
-    border: 2px solid #444;
-    box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
-    animation: modal-appear 0.5s;
 }
 
-@keyframes modal-appear {
-    from {transform: scale(0.8); opacity: 0;}
-    to {transform: scale(1); opacity: 1;}
-}
-
-.modal-content h2 {
-    font-size: 24px;
-    margin-bottom: 20px;
-    color: #ff0066;
-    text-shadow: 0 0 10px #ff0066;
+.modal h2 {
+    margin-top: 0;
+    color: #00ffff;
+    text-shadow: 0 0 10px rgba(0, 255, 255, 0.7);
+    text-transform: uppercase;
+    letter-spacing: 2px;
 }
 
 .modal-content p {
@@ -387,17 +385,32 @@ canvas#tetris {
 /* Options menu styles */
 .option-row {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin: 20px 0;
-    padding: 10px;
-    background: rgba(51, 51, 51, 0.8);
-    border-radius: 5px;
+    margin: 15px 0;
+    position: relative;
 }
 
 .option-row label {
-    font-size: 14px;
-    color: #fff;
+    margin-right: 10px;
+    min-width: 180px;
+}
+
+.tooltip {
+    font-size: 12px;
+    color: #aaa;
+    font-style: italic;
+    margin-left: 10px;
+    max-width: 200px;
+}
+
+.mobile-only {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .mobile-only {
+        display: flex;
+    }
 }
 
 /* Toggle switch styles */
@@ -495,6 +508,86 @@ input[type=range]::-moz-range-thumb {
     overflow: hidden;
     overscroll-behavior: none;
     touch-action: none;
+}
+
+/* 3D Rotation buttons */
+.rotate-buttons {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 100;
+}
+
+.rotate-btn {
+    background: linear-gradient(45deg, #007bff, #00ddff);
+    color: white;
+    border: none;
+    padding: 12px 15px;
+    border-radius: 50px;
+    font-size: 14px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
+    font-weight: bold;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.rotate-btn:active {
+    transform: scale(0.95);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    background: linear-gradient(45deg, #0062cc, #00b3ff);
+}
+
+/* Performance toggle */
+.perf-toggle {
+    display: flex;
+    align-items: center;
+    margin-top: 5px;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 5px;
+    border-radius: 4px;
+    font-size: 11px;
+}
+
+.perf-label {
+    margin-left: 5px;
+    color: #00ffff;
+    cursor: pointer;
+}
+
+#toggle-mobile-performance {
+    cursor: pointer;
+}
+
+/* Mobile mode adjustments for rotation buttons */
+.mobile-mode .rotate-buttons {
+    bottom: 15px;
+    right: 15px;
+    gap: 8px;
+}
+
+.mobile-mode .rotate-btn {
+    padding: 10px 12px;
+    font-size: 12px;
+}
+
+/* Mobile landscape orientation */
+@media (orientation: landscape) {
+    .mobile-mode .rotate-buttons {
+        flex-direction: row;
+        bottom: 10px;
+        right: 10px;
+    }
+}
+
+/* Smaller devices */
+@media (max-width: 400px) {
+    .mobile-mode .rotate-btn {
+        padding: 8px 10px;
+        font-size: 11px;
+    }
 }
 
 .mobile-mode .game-container {

@@ -12,6 +12,8 @@ const PREVIEW_BLOCK_SIZE = 25;
 // Mobile detection
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 let touchControls = false;
+// Mobile performance mode to reduce effects on mobile
+let mobilePerformanceMode = isMobile;
 
 // 7-bag randomization variables
 let pieceBag = [];
@@ -67,6 +69,7 @@ let enable3DEffects = true;
 let enableSpinAnimations = true;
 let animationSpeed = 0.05;
 let forceMobileControls = false;
+let reduceEffectsOnMobile = true; // New option to reduce effects on mobile
 
 // Controller variables
 let gamepadConnected = false;
@@ -317,26 +320,19 @@ class Firework {
         this.x = x;
         this.y = y;
         this.particles = [];
-        this.particleCount = 50;
-        this.gravity = 0.2;
         this.isDone = false;
-        this.colors = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
         
         // Create particles
-        for (let i = 0; i < this.particleCount; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const speed = Math.random() * 3 + 2;
-            const size = Math.random() * 3 + 1;
-            const color = this.colors[Math.floor(Math.random() * this.colors.length)];
-            
+        const particleCount = mobilePerformanceMode ? 15 : 30;
+        
+        for (let i = 0; i < particleCount; i++) {
             this.particles.push({
                 x: this.x,
                 y: this.y,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed,
-                size: size,
-                color: color,
-                alpha: 1
+                vx: (Math.random() - 0.5) * 8,
+                vy: (Math.random() - 0.5) * 8,
+                alpha: 1,
+                color: `hsl(${Math.random() * 360}, 100%, 50%)`
             });
         }
     }
@@ -352,11 +348,12 @@ class Firework {
             p.y += p.vy;
             
             // Apply gravity
-            p.vy += this.gravity;
+            p.vy += 0.1;
             
-            // Reduce alpha (fade out)
-            p.alpha -= 0.01;
+            // Fade out
+            p.alpha -= 0.02;
             
+            // Check if any particles are still visible
             if (p.alpha > 0) {
                 allDone = false;
             }
@@ -371,27 +368,31 @@ class Firework {
             
             if (p.alpha <= 0) continue;
             
+            ctx.save();
             ctx.globalAlpha = p.alpha;
             ctx.fillStyle = p.color;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            ctx.closePath();
-            ctx.fill();
+            
+            // Draw smaller particles on mobile for better performance
+            const size = mobilePerformanceMode ? 3 : 5;
+            ctx.fillRect(p.x, p.y, size, size);
+            
+            ctx.restore();
         }
-        
-        ctx.globalAlpha = 1; // Reset alpha
     }
 }
 
 // The Piece class
 class Piece {
-    constructor(tetromino, tetrominoN, color) {
+    constructor(tetromino, tetrominoN, color, tetrominoType) {
         this.tetromino = tetromino;
         this.color = color;
         
         this.tetrominoN = tetrominoN || 0; // Rotation state
         this.activeTetromino = this.tetromino[this.tetrominoN];
         this.shadowTetromino = this.activeTetromino; // For shadow calculation
+        
+        // Store piece type for SRS rotation kicks
+        this.tetrominoType = tetrominoType;
         
         // Starting position
         this.x = 3;
@@ -575,62 +576,85 @@ class Piece {
     
     // Rotate with 3D animation
     rotate(direction) {
+        // Direction can be 'right' or 'left'
+        if (gameOver || paused) return;
+        
         // Clear previous position
         this.undraw();
         clearPreviousPiecePosition();
         
-        // Determine next pattern
+        // For I tetromino, rotation pattern is different (cycles through 0-1)
+        // For other tetrominoes, it cycles through 0-1-2-3
         let nextPattern;
+        
         if (direction === 'right') {
-            nextPattern = (this.tetrominoN + 1) % this.tetromino.length;
-        } else {
-            nextPattern = (this.tetrominoN - 1 + this.tetromino.length) % this.tetromino.length;
-        }
-        
-        // Check for wall kicks
-        let kick = 0;
-        if (this.collision(0, 0, this.tetromino[nextPattern])) {
-            if (this.x > COLS / 2) {
-                // Right wall collision
-                kick = -1;
+            // Rotate clockwise
+            if (this.tetrominoType === 'I') {
+                nextPattern = (this.tetrominoN + 1) % 2;
             } else {
-                // Left wall collision
-                kick = 1;
+                nextPattern = (this.tetrominoN + 1) % 4;
+            }
+        } else if (direction === 'left') {
+            // Rotate counter-clockwise
+            if (this.tetrominoType === 'I') {
+                nextPattern = (this.tetrominoN - 1 + 2) % 2;
+            } else {
+                nextPattern = (this.tetrominoN - 1 + 4) % 4;
             }
         }
         
-        // If animations are disabled, apply change immediately
-        if (!enableSpinAnimations) {
-            // Apply pattern if not colliding
-            if (!this.collision(kick, 0, this.tetromino[nextPattern])) {
-                this.x += kick;
-                this.tetrominoN = nextPattern;
-                this.activeTetromino = this.tetromino[this.tetrominoN];
-                this.shadowTetromino = this.activeTetromino;
-                
-                // Update shadow position
-                this.calculateShadowY();
-                
-                // Play rotation sound
-                playPieceSound('rotate');
-                
-                // Draw the piece
-                this.draw();
+        // Wall kick testing for rotation
+        // Try the standard position first, then the kickTable positions
+        const kicks = this.getKicks(this.tetrominoN, nextPattern);
+        
+        // Try each kick position until we find one that works
+        let validKick = null;
+        
+        for (let i = 0; i < kicks.length; i++) {
+            const [kickX, kickY] = kicks[i];
+            
+            if (!this.collision(kickX, kickY, this.tetromino[nextPattern])) {
+                validKick = kickX;
+                // If a successful position is found, break the loop
+                break;
             }
+        }
+        
+        // If no valid kick position found, keep the original position
+        if (validKick === null) {
+            this.draw();
             return;
         }
         
-        // For animated version, start rotation transition
+        // If animations disabled, apply rotation immediately
+        if (!enableSpinAnimations) {
+            this.x += validKick;
+            this.tetrominoN = nextPattern;
+            this.activeTetromino = this.tetromino[this.tetrominoN];
+            this.shadowTetromino = this.activeTetromino;
+            
+            // Play rotation sound
+            playPieceSound('rotate');
+            
+            // Update shadow position
+            this.calculateShadowY();
+            
+            this.draw();
+            return;
+        }
+        
+        // Store for animation completion
+        this.targetPattern = nextPattern;
+        this.targetKick = validKick;
+        
+        // Start rotation transition
         this.rotationTransition = true;
         this.rotationDirection = direction === 'right' ? 'rotateRight' : 'rotateLeft';
         this.rotationProgress = 0;
+        this.rotationEasing = true;
         
-        // Store current tetromino
+        // Store original tetromino for animation
         this.originalTetromino = this.activeTetromino;
-        
-        // Set target tetrominoN and position
-        this.targetPattern = nextPattern;
-        this.targetKick = kick;
         
         // Play rotation sound
         playPieceSound('rotate');
@@ -813,11 +837,10 @@ class Piece {
     lock() {
         for (let r = 0; r < this.activeTetromino.length; r++) {
             for (let c = 0; c < this.activeTetromino[r].length; c++) {
-                if (!this.activeTetromino[r][c]) {
-                    continue;
-                }
+                // Skip empty cells
+                if (!this.activeTetromino[r][c]) continue;
                 
-                // Game over if piece is above the board
+                // Game over when piece is locked outside the board
                 if (this.y + r < 0) {
                     gameOver = true;
                     break;
@@ -828,41 +851,48 @@ class Piece {
             }
         }
         
-        // Remove full rows and track their positions for fireworks
+        // Clear full rows
         let linesCleared = 0;
         let clearedRows = [];
         
         for (let r = 0; r < ROWS; r++) {
             let isRowFull = true;
+            
+            // Check if the row is full
             for (let c = 0; c < COLS; c++) {
-                isRowFull = isRowFull && (board[r][c] !== EMPTY);
+                if (board[r][c] === EMPTY) {
+                    isRowFull = false;
+                    break;
+                }
             }
             
+            // If the row is full, clear it
             if (isRowFull) {
-                // Store the row index for fireworks
                 clearedRows.push(r);
+                linesCleared++;
                 
-                // Remove the row
-                for (let y = r; y > 1; y--) {
+                // Shift rows down
+                for (let y = r; y > 0; y--) {
                     for (let c = 0; c < COLS; c++) {
                         board[y][c] = board[y-1][c];
                     }
                 }
                 
-                // Top row
+                // Clear the top row
                 for (let c = 0; c < COLS; c++) {
                     board[0][c] = EMPTY;
                 }
-                
-                linesCleared++;
             }
         }
         
         // Create fireworks for each cleared row
         if (clearedRows.length > 0) {
+            // Reduce number of fireworks on mobile for better performance
+            const fireworksPerRow = mobilePerformanceMode ? 1 : 3;
+            
             for (let i = 0; i < clearedRows.length; i++) {
                 // Create multiple fireworks along the row
-                for (let j = 0; j < 3; j++) {
+                for (let j = 0; j < fireworksPerRow; j++) {
                     const x = (Math.random() * COLS * BLOCK_SIZE) + BLOCK_SIZE/2;
                     const y = (clearedRows[i] * BLOCK_SIZE) + BLOCK_SIZE/2;
                     fireworks.push(new Firework(x, y));
@@ -972,41 +1002,59 @@ class Piece {
     animate3DRotation() {
         if (!this.rotationTransition && !this.showCompletionEffect) return;
         
+        // Faster animation on mobile for better performance
+        const animationStep = mobilePerformanceMode ? animationSpeed * 1.5 : animationSpeed;
+        
         if (this.rotationTransition) {
-            // Increment progress - use the global animation speed
-            this.rotationProgress += animationSpeed;
+            // Update rotation progress
+            this.rotationProgress += animationStep;
             
-            // When rotation is complete
             if (this.rotationProgress >= 1) {
-                this.rotationTransition = false;
-                this.showCompletionEffect = enable3DEffects; // Only show completion effect if 3D effects are enabled
-                this.completionEffectProgress = 0;
-                
-                // Apply the target pattern/tetromino
-                if (this.rotationDirection === 'horizontal' || this.rotationDirection === 'vertical') {
-                    // Apply the mirror if it doesn't cause collision
-                    if (!this.collision(0, 0, this.targetTetromino)) {
-                        this.activeTetromino = this.targetTetromino;
-                        this.shadowTetromino = this.activeTetromino;
+                // Animation complete, apply the final result
+                // Check if the target tetromino would collide with anything
+                if (!this.targetTetromino) {
+                    // Handle rotation without target tetromino (for standard rotations)
+                    if (this.targetPattern !== undefined && this.targetKick !== undefined) {
+                        // Apply the rotation if it doesn't cause collision
+                        if (!this.collision(this.targetKick, 0, this.tetromino[this.targetPattern])) {
+                            this.x += this.targetKick;
+                            this.tetrominoN = this.targetPattern;
+                            this.activeTetromino = this.tetromino[this.tetrominoN];
+                            this.shadowTetromino = this.activeTetromino;
+                        }
                     }
-                } else if (this.rotationDirection === 'rotateLeft' || this.rotationDirection === 'rotateRight') {
-                    // Apply the rotation if it doesn't cause collision
-                    if (!this.collision(this.targetKick, 0, this.tetromino[this.targetPattern])) {
-                        this.x += this.targetKick;
-                        this.tetrominoN = this.targetPattern;
-                        this.activeTetromino = this.tetromino[this.tetrominoN];
-                        this.shadowTetromino = this.activeTetromino;
-                    }
+                } else if (this.collision(0, 0, this.targetTetromino)) {
+                    // If collision, revert to original position for mirror operations
+                    this.activeTetromino = this.originalTetromino;
+                    this.shadowTetromino = this.originalTetromino;
+                } else {
+                    // Apply the mirror/rotation
+                    this.activeTetromino = this.targetTetromino;
+                    this.shadowTetromino = this.targetTetromino;
                 }
                 
-                // Update shadow position
+                // Reset rotation state
+                this.rotationTransition = false;
+                this.rotationProgress = 0;
+                
+                // Reset rotation angles
+                this.rotationAngleX = 0;
+                this.rotationAngleY = 0;
+                this.rotationAngleZ = 0;
+                
+                // Recalculate shadow position
                 this.calculateShadowY();
                 
-                // If no completion effect, we're done
-                if (!this.showCompletionEffect) {
-                    this.draw();
-                    return;
+                // Skip completion effect on mobile for performance
+                if (!mobilePerformanceMode && enable3DEffects) {
+                    // Start completion effect
+                    this.showCompletionEffect = true;
+                    this.completionEffectProgress = 0;
                 }
+                
+                // Draw in new position
+                this.draw();
+                return;
             }
             
             // Calculate current rotation angles based on progress with easing
@@ -1029,7 +1077,9 @@ class Piece {
             }
         } else if (this.showCompletionEffect) {
             // Handle completion effect animation
-            this.completionEffectProgress += 0.1;
+            // Use faster animation on mobile
+            const completionStep = mobilePerformanceMode ? 0.15 : 0.1;
+            this.completionEffectProgress += completionStep;
             
             if (this.completionEffectProgress >= 1) {
                 this.showCompletionEffect = false;
@@ -1043,8 +1093,12 @@ class Piece {
         // Redraw with current rotation
         this.draw();
         
-        // Continue animation
-        requestAnimationFrame(() => this.animate3DRotation());
+        // Continue animation - use lower frame rate on mobile
+        if (mobilePerformanceMode) {
+            setTimeout(() => this.animate3DRotation(), 16); // ~60fps
+        } else {
+            requestAnimationFrame(() => this.animate3DRotation());
+        }
     }
     
     // New method to draw with 3D rotation effect
@@ -1057,6 +1111,9 @@ class Piece {
         
         // Sort blocks by depth for proper rendering
         let blocks = [];
+        
+        // Reduce complexity on mobile devices
+        const skipGradientOnMobile = mobilePerformanceMode;
         
         for (let r = 0; r < tetromino.length; r++) {
             for (let c = 0; c < tetromino[r].length; c++) {
@@ -1081,8 +1138,8 @@ class Piece {
                     transX = relX * Math.cos(angle);
                     depth = relX * Math.sin(angle);
                     
-                    // Add perspective effect
-                    const perspective = 0.2;
+                    // Add perspective effect - less intense on mobile
+                    const perspective = mobilePerformanceMode ? 0.15 : 0.2;
                     const perspectiveScale = 1 + depth * perspective;
                     transX /= perspectiveScale;
                     transY /= perspectiveScale;
@@ -1096,13 +1153,13 @@ class Piece {
                     transY = relY * Math.cos(angle);
                     depth = relY * Math.sin(angle);
                     
-                    // Add perspective effect
-                    const perspective = 0.2;
+                    // Add perspective effect - less intense on mobile
+                    const perspective = mobilePerformanceMode ? 0.15 : 0.2;
                     const perspectiveScale = 1 + depth * perspective;
                     transX /= perspectiveScale;
                     transY /= perspectiveScale;
                     scale /= perspectiveScale;
-                } else if (this.rotationDirection === 'rotateRight' || this.rotationDirection === 'rotateLeft') {
+                } else {
                     // Z-axis rotation for regular tetris rotations
                     const angle = this.rotationAngleZ;
                     
@@ -1114,8 +1171,9 @@ class Piece {
                     scale = 1.0;
                     
                     // Add subtle depth effect based on rotation progress
+                    // Reduce effect on mobile
                     const rotationProgress = Math.abs(angle) / (Math.PI * 2);
-                    depth = 0.3 * Math.sin(rotationProgress * Math.PI);
+                    depth = (mobilePerformanceMode ? 0.2 : 0.3) * Math.sin(rotationProgress * Math.PI);
                 }
                 
                 // Apply transformation
@@ -1140,7 +1198,7 @@ class Piece {
         for (const block of blocks) {
             if (block.scale > 0) {
                 // Apply scale to create 3D effect with depth
-                draw3DSquare(block.x, block.y, this.color, block.scale, block.depth);
+                draw3DSquare(block.x, block.y, this.color, block.scale, block.depth, skipGradientOnMobile);
             }
         }
     }
@@ -1165,7 +1223,53 @@ class Piece {
             }
         }
     }
+    
+    // Get wall kicks for rotation based on tetromino type and rotation state
+    getKicks(currentRotation, nextRotation) {
+        // Special handling for I tetromino (uses different kick table)
+        if (this.tetrominoType === 'I') {
+            // Wall kick data for I tetromino (SRS)
+            const kickTableI = {
+                "0-1": [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
+                "1-0": [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
+                "1-2": [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
+                "2-1": [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+                "2-3": [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
+                "3-2": [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
+                "3-0": [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+                "0-3": [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]]
+            };
+            
+            // Convert 0-3 rotation to 0-1 for I tetromino
+            const from = currentRotation % 2;
+            const to = nextRotation % 2;
+            const key = `${from}-${to}`;
+            
+            return kickTableI[key] || [[0, 0]];
+        } else {
+            // Wall kick data for JLSTZ tetrominoes (SRS)
+            const kickTable = {
+                "0-1": [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+                "1-0": [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+                "1-2": [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+                "2-1": [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+                "2-3": [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+                "3-2": [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+                "3-0": [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+                "0-3": [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]]
+            };
+            
+            // Handle O tetromino (no rotation)
+            if (this.tetrominoType === 'O') {
+                return [[0, 0]];
+            }
+            
+            const key = `${currentRotation}-${nextRotation}`;
+            return kickTable[key] || [[0, 0]];
+        }
+    }
 }
+
 
 // Draw a shadow square on the board
 function drawShadowSquare(x, y) {
@@ -1258,105 +1362,54 @@ function drawSquare(x, y, color) {
 }
 
 // Draw a 3D square with rotation effect
-function draw3DSquare(x, y, color, scale, depth = 0) {
-    if (y < 0) return; // Don't draw above the board
+function draw3DSquare(x, y, color, scale, depth = 0, skipGradient = false) {
+    // Convert block coordinates to pixel coordinates
+    const pixelX = x * BLOCK_SIZE;
+    const pixelY = y * BLOCK_SIZE;
     
-    // Save the context state
+    // Calculate actual size based on scale
+    const size = BLOCK_SIZE * scale;
+    
+    // Calculate offset to keep block centered
+    const offsetX = (BLOCK_SIZE - size) / 2;
+    const offsetY = (BLOCK_SIZE - size) / 2;
+    
+    // Save context state
     ctx.save();
     
-    // Calculate the position with scaling from center of block
-    const centerX = (x + 0.5) * BLOCK_SIZE;
-    const centerY = (y + 0.5) * BLOCK_SIZE;
-    const scaledSize = BLOCK_SIZE * Math.abs(scale);
-    const offsetX = centerX - scaledSize / 2;
-    const offsetY = centerY - scaledSize / 2;
+    // Draw the block
+    ctx.fillStyle = color;
+    ctx.fillRect(pixelX + offsetX, pixelY + offsetY, size, size);
     
-    // Create gradient for filled squares
-    const gradient = ctx.createLinearGradient(
-        offsetX, 
-        offsetY, 
-        offsetX + scaledSize, 
-        offsetY + scaledSize
-    );
+    // Apply gradient for 3D effect - skip for performance mode
+    if (!skipGradient) {
+        // Lighter side (light source from top-left)
+        const lightVal = Math.min(255, 150 + depth * 200);
+        ctx.fillStyle = `rgba(${lightVal}, ${lightVal}, ${lightVal}, 0.3)`;
+        ctx.beginPath();
+        ctx.moveTo(pixelX + offsetX, pixelY + offsetY);
+        ctx.lineTo(pixelX + offsetX + size, pixelY + offsetY);
+        ctx.lineTo(pixelX + offsetX + size / 2, pixelY + offsetY + size / 2);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Darker side (shadow on bottom-right)
+        const shadowVal = Math.max(0, 50 - depth * 100);
+        ctx.fillStyle = `rgba(${shadowVal}, ${shadowVal}, ${shadowVal}, 0.3)`;
+        ctx.beginPath();
+        ctx.moveTo(pixelX + offsetX + size, pixelY + offsetY + size);
+        ctx.lineTo(pixelX + offsetX, pixelY + offsetY + size);
+        ctx.lineTo(pixelX + offsetX + size / 2, pixelY + offsetY + size / 2);
+        ctx.closePath();
+        ctx.fill();
+    }
     
-    const gradColors = GRADIENT_COLORS[color] || [color, color];
+    // Draw border
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(pixelX + offsetX, pixelY + offsetY, size, size);
     
-    // Adjust color based on depth
-    const depthFactor = 0.7 + 0.3 * (1 - Math.min(1, Math.abs(depth)));
-    const adjustColor = (color) => {
-        // Simple color brightening/darkening based on depth
-        if (color.startsWith('#')) {
-            // Convert hex to RGB
-            const r = parseInt(color.slice(1, 3), 16);
-            const g = parseInt(color.slice(3, 5), 16);
-            const b = parseInt(color.slice(5, 7), 16);
-            
-            // Adjust brightness
-            const newR = Math.min(255, Math.floor(r * depthFactor));
-            const newG = Math.min(255, Math.floor(g * depthFactor));
-            const newB = Math.min(255, Math.floor(b * depthFactor));
-            
-            // Convert back to hex
-            return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
-        }
-        return color;
-    };
-    
-    const adjustedColors = [
-        adjustColor(gradColors[0]),
-        adjustColor(gradColors[1])
-    ];
-    
-    gradient.addColorStop(0, adjustedColors[0]);
-    gradient.addColorStop(1, adjustedColors[1]);
-    
-    // Add glow effect
-    ctx.shadowColor = adjustedColors[0];
-    ctx.shadowBlur = 10 * Math.abs(scale);
-    
-    // Fill with gradient
-    ctx.fillStyle = gradient;
-    ctx.fillRect(offsetX, offsetY, scaledSize, scaledSize);
-    
-    // Reset shadow for clean edges
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    
-    // Scale line width with the block
-    const lineWidth = 2 * Math.abs(scale);
-    
-    // Add highlights and shadow - scaled
-    ctx.strokeStyle = '#fff';
-    ctx.globalAlpha = depthFactor; // Make lines fade with depth
-    ctx.lineWidth = lineWidth;
-    ctx.beginPath();
-    ctx.moveTo(offsetX, offsetY);
-    ctx.lineTo(offsetX + scaledSize, offsetY);
-    ctx.lineTo(offsetX + scaledSize, offsetY + scaledSize * 0.3);
-    ctx.moveTo(offsetX, offsetY);
-    ctx.lineTo(offsetX, offsetY + scaledSize);
-    ctx.lineTo(offsetX + scaledSize * 0.3, offsetY + scaledSize);
-    ctx.stroke();
-    
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = lineWidth;
-    ctx.beginPath();
-    ctx.moveTo(offsetX + scaledSize, offsetY);
-    ctx.lineTo(offsetX + scaledSize, offsetY + scaledSize);
-    ctx.lineTo(offsetX, offsetY + scaledSize);
-    ctx.stroke();
-    
-    // Add inner glow
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.2 * depthFactor})`;
-    const innerPadding = 4 * Math.abs(scale);
-    ctx.fillRect(
-        offsetX + innerPadding, 
-        offsetY + innerPadding, 
-        scaledSize - innerPadding * 2, 
-        scaledSize - innerPadding * 2
-    );
-    
-    // Restore the context state
+    // Restore context
     ctx.restore();
 }
 
@@ -1569,6 +1622,9 @@ function playLineClearSound(lineCount) {
 
 // Update game frame
 function update() {
+    // Limit fireworks on mobile for performance
+    const maxFireworks = mobilePerformanceMode ? 5 : 15;
+    
     // Update and draw fireworks
     for (let i = fireworks.length - 1; i >= 0; i--) {
         fireworks[i].update();
@@ -1576,6 +1632,11 @@ function update() {
         if (fireworks[i].isDone) {
             fireworks.splice(i, 1);
         }
+    }
+    
+    // Limit fireworks count for performance on mobile
+    if (fireworks.length > maxFireworks) {
+        fireworks.splice(0, fireworks.length - maxFireworks);
     }
     
     // Request the next frame
@@ -1604,14 +1665,16 @@ function draw() {
     }
     
     // Draw fireworks (clipped to canvas area)
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, canvas.width, canvas.height);
-    ctx.clip();
-    for (let i = 0; i < fireworks.length; i++) {
-        fireworks[i].draw();
+    if (!mobilePerformanceMode || fireworks.length < 3) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, canvas.width, canvas.height);
+        ctx.clip();
+        for (let i = 0; i < fireworks.length; i++) {
+            fireworks[i].draw();
+        }
+        ctx.restore();
     }
-    ctx.restore();
     
     // Draw messages if game is paused
     if (paused) {
@@ -1734,6 +1797,17 @@ function applyOptions() {
         document.body.classList.remove('mobile-mode');
     }
     
+    // Apply performance optimizations for mobile
+    if (reduceEffectsOnMobile && isMobile) {
+        mobilePerformanceMode = true;
+        // Reduce effects automatically on mobile for better performance
+        if (document.getElementById('toggle-mobile-performance').checked === false) {
+            document.getElementById('toggle-mobile-performance').checked = true;
+        }
+    } else {
+        mobilePerformanceMode = document.getElementById('toggle-mobile-performance').checked;
+    }
+    
     // Save options
     saveOptions();
 }
@@ -1744,7 +1818,8 @@ function saveOptions() {
         enable3DEffects,
         enableSpinAnimations,
         animationSpeed,
-        forceMobileControls
+        forceMobileControls,
+        reduceEffectsOnMobile
     }));
 }
 
@@ -1758,6 +1833,7 @@ function loadOptions() {
         enableSpinAnimations = options.enableSpinAnimations !== undefined ? options.enableSpinAnimations : true;
         animationSpeed = options.animationSpeed !== undefined ? options.animationSpeed : 0.05;
         forceMobileControls = options.forceMobileControls !== undefined ? options.forceMobileControls : false;
+        reduceEffectsOnMobile = options.reduceEffectsOnMobile !== undefined ? options.reduceEffectsOnMobile : true;
         
         // Update UI controls
         toggle3DEffects.checked = enable3DEffects;
@@ -1766,6 +1842,10 @@ function loadOptions() {
         
         if (toggleMobileControls) {
             toggleMobileControls.checked = forceMobileControls;
+        }
+        
+        if (document.getElementById('toggle-mobile-performance')) {
+            document.getElementById('toggle-mobile-performance').checked = reduceEffectsOnMobile;
         }
     }
 }
@@ -1821,6 +1901,13 @@ function init() {
     animationSpeedSlider.addEventListener('input', function() {
         applyOptions();
     });
+    
+    if (document.getElementById('toggle-mobile-performance')) {
+        document.getElementById('toggle-mobile-performance').addEventListener('change', function() {
+            mobilePerformanceMode = this.checked;
+            applyOptions();
+        });
+    }
     
     if (toggleMobileControls) {
         toggleMobileControls.addEventListener('change', function() {
@@ -2293,29 +2380,6 @@ function handleTouchEnd(event) {
             Math.pow(touchY - lastTapY, 2)
         );
         
-        const distanceFromSecondLastTap = Math.sqrt(
-            Math.pow(touchX - secondLastTapX, 2) + 
-            Math.pow(touchY - secondLastTapY, 2)
-        );
-        
-        // Check for triple tap - all three taps must be close in position and time
-        if (touchEndTime - secondLastTapTime < TRIPLE_TAP_THRESHOLD && 
-            distanceFromLastTap < TAP_DISTANCE_THRESHOLD && 
-            distanceFromSecondLastTap < TAP_DISTANCE_THRESHOLD) {
-            
-            // Execute 3D rotation (randomly choose horizontal or vertical)
-            if (Math.random() > 0.5) {
-                p.rotate3DX();
-            } else {
-                p.rotate3DY();
-            }
-            
-            // Reset tap tracking after triple tap
-            secondLastTapTime = 0;
-            lastTapTime = 0;
-            return;
-        }
-        
         // Check for double tap (for hard drop)
         const timeBetweenTaps = touchEndTime - lastTapTime;
         
@@ -2323,13 +2387,8 @@ function handleTouchEnd(event) {
             // This is a double-tap, do hard drop
             p.hardDrop();
             
-            // Store for potential triple tap
-            secondLastTapTime = lastTapTime;
-            secondLastTapX = lastTapX;
-            secondLastTapY = lastTapY;
-            lastTapTime = touchEndTime;
-            lastTapX = touchX;
-            lastTapY = touchY;
+            // Reset tap tracking
+            lastTapTime = 0;
             
             // Debug
             console.log("Double tap detected - hard drop");
@@ -2339,15 +2398,7 @@ function handleTouchEnd(event) {
         // Single tap - rotates piece
         p.rotate('right');
         
-        // Update tracking for potential double/triple tap
-        if (lastTapTime > 0) {
-            // Store previous tap data
-            secondLastTapTime = lastTapTime;
-            secondLastTapX = lastTapX;
-            secondLastTapY = lastTapY;
-        }
-        
-        // Set current tap as the last tap
+        // Update tracking for potential double tap
         lastTapTime = touchEndTime;
         lastTapX = touchX;
         lastTapY = touchY;
@@ -2359,7 +2410,29 @@ function handleTouchEnd(event) {
 
 // Create touch instructions overlay
 function createTouchControlButtons() {
-    // Do not create buttons - using gesture-based controls only
+    // Create 3D rotation buttons
+    const rotateButtons = document.createElement('div');
+    rotateButtons.className = 'rotate-buttons';
+    rotateButtons.innerHTML = `
+        <button id="rotate3d-x" class="rotate-btn">3D Flip ↕</button>
+        <button id="rotate3d-y" class="rotate-btn">3D Flip ↔</button>
+    `;
+    document.body.appendChild(rotateButtons);
+    
+    // Add event listeners
+    document.getElementById('rotate3d-x').addEventListener('click', function(e) {
+        e.preventDefault();
+        if (!gameOver && !paused) {
+            p.rotate3DX();
+        }
+    });
+    
+    document.getElementById('rotate3d-y').addEventListener('click', function(e) {
+        e.preventDefault();
+        if (!gameOver && !paused) {
+            p.rotate3DY();
+        }
+    });
     
     // Create touch instructions overlay
     const touchInstructions = document.createElement('div');
@@ -2370,7 +2443,7 @@ function createTouchControlButtons() {
         <p><b>Swipe down:</b> Soft drop</p>
         <p><b>Tap anywhere:</b> Rotate right</p>
         <p><b>Double-tap:</b> Hard drop</p>
-        <p><b>Triple-tap:</b> 3D rotate</p>
+        <p><b>3D Flip Buttons:</b> Rotate in 3D</p>
     `;
     document.body.appendChild(touchInstructions);
     
@@ -2408,6 +2481,31 @@ function createTouchControlButtons() {
     if (scoreContainer) {
         scoreContainer.appendChild(instructionsBtn);
     }
+    
+    // Add performance mode toggle
+    const perfToggle = document.createElement('input');
+    perfToggle.type = 'checkbox';
+    perfToggle.id = 'toggle-mobile-performance';
+    perfToggle.checked = mobilePerformanceMode;
+    
+    const perfLabel = document.createElement('label');
+    perfLabel.htmlFor = 'toggle-mobile-performance';
+    perfLabel.textContent = 'Perf Mode';
+    perfLabel.className = 'perf-label';
+    
+    const perfContainer = document.createElement('div');
+    perfContainer.className = 'perf-toggle';
+    perfContainer.appendChild(perfToggle);
+    perfContainer.appendChild(perfLabel);
+    
+    if (scoreContainer) {
+        scoreContainer.appendChild(perfContainer);
+    }
+    
+    // Add event listener
+    perfToggle.addEventListener('change', function() {
+        mobilePerformanceMode = this.checked;
+    });
 }
 
 // Set active piece to next piece and create new next piece
@@ -2496,10 +2594,23 @@ function getNextPieceFromBag() {
     const tetromino = PIECES[pieceIndex];
     const color = COLORS[pieceIndex];
     
+    // Get the tetromino type based on index
+    let tetrominoType;
+    switch(pieceIndex) {
+        case 0: tetrominoType = 'I'; break;
+        case 1: tetrominoType = 'J'; break;
+        case 2: tetrominoType = 'L'; break;
+        case 3: tetrominoType = 'O'; break;
+        case 4: tetrominoType = 'S'; break;
+        case 5: tetrominoType = 'T'; break;
+        case 6: tetrominoType = 'Z'; break;
+        default: tetrominoType = 'X';
+    }
+    
     // Random rotation/orientation
     const randomIndex = Math.floor(Math.random() * tetromino.length);
     
-    return new Piece(tetromino, randomIndex, color);
+    return new Piece(tetromino, randomIndex, color, tetrominoType);
 }
 
 // Start the game
