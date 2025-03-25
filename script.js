@@ -381,11 +381,11 @@ class Firework {
 
 // The Piece class
 class Piece {
-    constructor(tetromino, color) {
+    constructor(tetromino, tetrominoN, color) {
         this.tetromino = tetromino;
         this.color = color;
         
-        this.tetrominoN = 0; // Default rotation state
+        this.tetrominoN = tetrominoN || 0; // Rotation state
         this.activeTetromino = this.tetromino[this.tetrominoN];
         this.shadowTetromino = this.activeTetromino; // For shadow calculation
         
@@ -1510,8 +1510,11 @@ function drawBoard() {
 
 // Generate random piece
 function randomPiece() {
-    let r = Math.floor(Math.random() * PIECES.length);
-    return new Piece(PIECES[r], COLORS[r]);
+    let randomN = Math.floor(Math.random() * PIECES.length);
+    let randomTetromino = PIECES[randomN];
+    let randomIndex = Math.floor(Math.random() * randomTetromino.length);
+    
+    return new Piece(randomTetromino, randomIndex, COLORS[randomN]);
 }
 
 // Play piece movement sounds
@@ -1620,7 +1623,26 @@ function draw() {
 // Drop the piece - called by interval
 function dropPiece() {
     if (gameOver || paused) return;
-    p.moveDown();
+    
+    let now = Date.now();
+    let delta = now - dropStart;
+    
+    // Drop speed depends on level
+    let speed = 1000 * (1 - (level - 1) * 0.1);
+    speed = Math.max(speed, 100); // Don't allow too fast drops (minimum 100ms)
+    
+    if (delta > speed) {
+        p.moveDown();
+        dropStart = now;
+        
+        // If we can't move down and we're still at the top, game over
+        if (p.collision(0, 1) && p.y < 1) {
+            gameOver = true;
+            showGameOver();
+        }
+    }
+    
+    if (!gameOver) requestAnimationFrame(draw);
 }
 
 // Show game over modal
@@ -1752,9 +1774,11 @@ function init() {
     // Draw the board
     drawBoard();
     
-    // Generate pieces
+    // Generate initial pieces
     p = randomPiece();
     nextPiece = randomPiece();
+    
+    // Draw initial next piece
     nextPiece.drawNextPiece();
     
     // Set up game interval
@@ -1836,13 +1860,13 @@ function handleResize() {
         
         // For portrait: maximize width, maintain aspect ratio
         if (isPortrait) {
-            // Use 95% of viewport width
-            const targetWidth = viewportWidth * 0.95;
+            // Use 90% of viewport width
+            const targetWidth = viewportWidth * 0.9;
             const targetHeight = (targetWidth / COLS) * ROWS;
             
             // If height is too tall, scale down
-            if (targetHeight > availableHeight * 0.9) {
-                const scaleFactor = (availableHeight * 0.9) / targetHeight;
+            if (targetHeight > availableHeight * 0.8) {
+                const scaleFactor = (availableHeight * 0.8) / targetHeight;
                 canvas.style.width = `${targetWidth * scaleFactor}px`;
                 canvas.style.height = `${targetHeight * scaleFactor}px`;
             } else {
@@ -1852,8 +1876,8 @@ function handleResize() {
         } 
         // For landscape: maximize height, maintain aspect ratio
         else {
-            // Use 80% of available height
-            const targetHeight = availableHeight * 0.8;
+            // Use 75% of available height
+            const targetHeight = availableHeight * 0.75;
             const targetWidth = (targetHeight / ROWS) * COLS;
             
             // If width is too wide, scale down
@@ -1867,11 +1891,12 @@ function handleResize() {
             }
         }
         
-        // Scale next piece preview to match
-        if (nextPieceCanvas) {
-            const scale = parseInt(canvas.style.width) / (COLS * BLOCK_SIZE);
-            nextPieceCanvas.style.transform = `scale(${scale})`;
-            nextPieceCanvas.style.transformOrigin = 'top left';
+        // Force a redraw of the nextPiece preview to fix rendering issues
+        if (nextPiece) {
+            setTimeout(() => {
+                nextPieceCtx.clearRect(0, 0, nextPieceCanvas.width, nextPieceCanvas.height);
+                nextPiece.drawNextPiece();
+            }, 100);
         }
         
         // Show touch controls mode
@@ -2301,6 +2326,64 @@ function createTouchControlButtons() {
             touchInstructions.style.display = 'none';
         }, 1000);
     }, 5000);
+}
+
+// Set active piece to next piece and create new next piece
+function getNextPiece() {
+    // Current piece becomes the next piece
+    p = nextPiece;
+    
+    // Generate a new next piece
+    nextPiece = randomPiece();
+    
+    // Draw the next piece in preview
+    nextPiece.drawNextPiece();
+    
+    // Force redraw for mobile to ensure it renders
+    if (isMobile || forceMobileControls) {
+        setTimeout(() => {
+            nextPieceCtx.clearRect(0, 0, nextPieceCanvas.width, nextPieceCanvas.height);
+            nextPiece.drawNextPiece();
+        }, 50);
+    }
+}
+
+// Lock the piece in the board and get the next piece
+function lockPiece() {
+    // Add piece to board
+    for (let r = 0; r < p.activeTetromino.length; r++) {
+        for (let c = 0; c < p.activeTetromino[r].length; c++) {
+            // Skip empty squares
+            if (!p.activeTetromino[r][c]) {
+                continue;
+            }
+            
+            // Game over when piece is locked at the top
+            if (p.y + r < 0) {
+                gameOver = true;
+                showGameOver();
+                return;
+            }
+            
+            // Lock piece
+            board[p.y + r][p.x + c] = p.color;
+        }
+    }
+    
+    // Check for completed rows
+    checkRows();
+    
+    // Update the score
+    updateScore();
+    
+    // Get next piece
+    getNextPiece();
+    
+    // Reset drop timer
+    dropStart = Date.now();
+    
+    // Play drop sound
+    playSound(dropSound);
 }
 
 // Start the game

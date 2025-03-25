@@ -516,15 +516,20 @@ input[type=range]::-moz-range-thumb {
     flex-direction: column;
     align-items: center;
     margin: 0 auto;
+    position: relative;
+    margin-bottom: 20px; /* Add bottom margin to make room for next piece */
 }
 
 .mobile-mode #next-piece-preview {
-    position: absolute;
-    top: -50px; /* Position above the game board */
+    position: absolute; 
+    top: auto;
+    bottom: -70px; /* Position below the game board */
     left: 50%;
     transform: translateX(-50%);
     margin: 0;
     background: rgba(0, 0, 0, 0.7);
+    z-index: 10;
+    border-color: rgba(0, 255, 255, 0.5);
 }
 
 .mobile-mode .score-container {
@@ -589,10 +594,12 @@ input[type=range]::-moz-range-thumb {
 @media (orientation: portrait) {
     .mobile-mode .game-container {
         padding-top: 40px;
+        padding-bottom: 80px; /* Add bottom padding for next piece */
     }
     
     .mobile-mode canvas#tetris {
         width: 90vw;
+        max-height: 75vh; /* Ensure game board doesn't take too much height */
         height: auto;
         object-fit: contain;
     }
@@ -623,13 +630,14 @@ input[type=range]::-moz-range-thumb {
     .mobile-mode #next-piece-preview {
         position: absolute;
         top: 0;
+        bottom: auto;
         left: 100%;
-        margin-left: 10px;
         transform: none;
+        margin-left: 10px;
     }
     
     .mobile-mode canvas#tetris {
-        height: 80vh;
+        height: 75vh; /* Slightly reduced to ensure full visibility */
         width: auto;
         object-fit: contain;
     }
