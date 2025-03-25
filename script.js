@@ -1821,44 +1821,70 @@ function handleResize() {
     const gameContainer = document.querySelector('.game-container');
     const gameWrapper = document.querySelector('.game-wrapper');
     
-    if (isMobile) {
+    if (isMobile || forceMobileControls) {
         // Scale the canvas to fit mobile screen
         const viewportWidth = Math.min(window.innerWidth, document.documentElement.clientWidth);
         const viewportHeight = Math.min(window.innerHeight, document.documentElement.clientHeight);
         
-        // Calculate optimal scale while maintaining aspect ratio
-        const scaleWidth = (viewportWidth * 0.85) / (COLS * BLOCK_SIZE);
-        const scaleHeight = (viewportHeight * 0.6) / (ROWS * BLOCK_SIZE);
-        const scale = Math.min(scaleWidth, scaleHeight, 1); // Don't scale up beyond 1
+        // Detect orientation
+        const isPortrait = viewportHeight > viewportWidth;
         
-        // Apply scale transform to canvas
-        canvas.style.transform = `scale(${scale})`;
-        canvas.style.transformOrigin = 'top left';
+        // Calculate available game area (accounting for UI elements)
+        const titleHeight = 40; // Estimate for title
+        const scoreHeight = isPortrait ? 120 : 0; // In portrait, score is above/below game
+        const availableHeight = viewportHeight - titleHeight - scoreHeight;
         
-        // Adjust container width based on scaled canvas
-        if (gameWrapper) {
-            gameWrapper.style.width = `${(COLS * BLOCK_SIZE) * scale}px`;
-            gameWrapper.style.height = `${(ROWS * BLOCK_SIZE) * scale}px`;
+        // For portrait: maximize width, maintain aspect ratio
+        if (isPortrait) {
+            // Use 95% of viewport width
+            const targetWidth = viewportWidth * 0.95;
+            const targetHeight = (targetWidth / COLS) * ROWS;
+            
+            // If height is too tall, scale down
+            if (targetHeight > availableHeight * 0.9) {
+                const scaleFactor = (availableHeight * 0.9) / targetHeight;
+                canvas.style.width = `${targetWidth * scaleFactor}px`;
+                canvas.style.height = `${targetHeight * scaleFactor}px`;
+            } else {
+                canvas.style.width = `${targetWidth}px`;
+                canvas.style.height = `${targetHeight}px`;
+            }
+        } 
+        // For landscape: maximize height, maintain aspect ratio
+        else {
+            // Use 80% of available height
+            const targetHeight = availableHeight * 0.8;
+            const targetWidth = (targetHeight / ROWS) * COLS;
+            
+            // If width is too wide, scale down
+            if (targetWidth > viewportWidth * 0.6) {
+                const scaleFactor = (viewportWidth * 0.6) / targetWidth;
+                canvas.style.width = `${targetWidth * scaleFactor}px`;
+                canvas.style.height = `${targetHeight * scaleFactor}px`;
+            } else {
+                canvas.style.width = `${targetWidth}px`;
+                canvas.style.height = `${targetHeight}px`;
+            }
         }
         
-        // Scale next piece preview
+        // Scale next piece preview to match
         if (nextPieceCanvas) {
+            const scale = parseInt(canvas.style.width) / (COLS * BLOCK_SIZE);
             nextPieceCanvas.style.transform = `scale(${scale})`;
             nextPieceCanvas.style.transformOrigin = 'top left';
         }
         
-        // Show touch controls
+        // Show touch controls mode
         document.body.classList.add('mobile-mode');
     } else {
         // Reset to desktop layout
-        canvas.style.transform = 'none';
-        if (gameWrapper) {
-            gameWrapper.style.width = '';
-            gameWrapper.style.height = '';
-        }
+        canvas.style.width = '';
+        canvas.style.height = '';
+        
         if (nextPieceCanvas) {
             nextPieceCanvas.style.transform = 'none';
         }
+        
         document.body.classList.remove('mobile-mode');
     }
 }
@@ -2132,6 +2158,10 @@ const SWIPE_THRESHOLD = 30;
 const TAP_THRESHOLD = 200; // milliseconds
 const DOUBLE_TAP_THRESHOLD = 300; // milliseconds
 let lastTapTime = 0;
+let lastMoveTime = 0;
+let touchIdentifier = null;
+let multiTouchDetected = false;
+const MOVE_COOLDOWN = 100; // ms between moves to prevent too rapid movement
 
 // Initialize touch controls
 function initTouchControls() {
@@ -2149,11 +2179,20 @@ function handleTouchStart(event) {
     if (gameOver || paused) return;
     event.preventDefault();
     
+    // Track if multiple touches
+    if (event.touches.length > 1) {
+        multiTouchDetected = true;
+        return;
+    }
+    
+    multiTouchDetected = false;
+    
     // Store the initial touch position
     const touch = event.touches[0];
     touchStartX = touch.clientX;
     touchStartY = touch.clientY;
     touchStartTime = Date.now();
+    touchIdentifier = touch.identifier;
 }
 
 // Handle touch move event
@@ -2161,28 +2200,44 @@ function handleTouchMove(event) {
     if (gameOver || paused) return;
     event.preventDefault();
     
+    // Skip if it's a multi-touch gesture
+    if (multiTouchDetected || event.touches.length > 1) return;
+    
+    const now = Date.now();
+    if (now - lastMoveTime < MOVE_COOLDOWN) return;
+    
     if (!event.touches.length) return;
     
     const touch = event.touches[0];
+    // Make sure we're tracking the same touch
+    if (touch.identifier !== touchIdentifier) return;
+    
     const diffX = touch.clientX - touchStartX;
     const diffY = touch.clientY - touchStartY;
     
-    // Detect horizontal swipe for movement
-    if (Math.abs(diffX) > SWIPE_THRESHOLD) {
-        if (diffX > 0) {
-            p.moveRight();
+    // Only process if movement is significant (prevent accidental moves)
+    const absX = Math.abs(diffX);
+    const absY = Math.abs(diffY);
+    
+    if (absX > SWIPE_THRESHOLD || absY > SWIPE_THRESHOLD) {
+        // Determine direction of swipe - if more horizontal than vertical
+        if (absX > absY) {
+            if (diffX > 0) {
+                p.moveRight();
+            } else {
+                p.moveLeft();
+            }
         } else {
-            p.moveLeft();
+            // Only handle downward swipes for soft drop
+            if (diffY > 0) {
+                p.moveDown();
+            }
         }
         
         // Reset touch start to allow for continuous movement
         touchStartX = touch.clientX;
-    }
-    
-    // Detect downward swipe for soft drop
-    if (diffY > SWIPE_THRESHOLD) {
-        p.moveDown();
         touchStartY = touch.clientY;
+        lastMoveTime = now;
     }
 }
 
@@ -2190,6 +2245,18 @@ function handleTouchMove(event) {
 function handleTouchEnd(event) {
     if (gameOver || paused) return;
     event.preventDefault();
+    
+    // Process two-finger tap
+    if (multiTouchDetected) {
+        // Choose either horizontal or vertical 3D rotation
+        if (Math.random() > 0.5) {
+            p.rotate3DX();
+        } else {
+            p.rotate3DY();
+        }
+        multiTouchDetected = false;
+        return;
+    }
     
     const touchEndTime = Date.now();
     const touchDuration = touchEndTime - touchStartTime;
@@ -2206,102 +2273,34 @@ function handleTouchEnd(event) {
             lastTapTime = touchEndTime;
         }
     }
+    
+    // Reset touch identifier
+    touchIdentifier = null;
 }
 
 // Create on-screen control buttons for mobile
 function createTouchControlButtons() {
-    const controlsContainer = document.createElement('div');
-    controlsContainer.className = 'touch-controls-container';
-    document.body.appendChild(controlsContainer);
+    // Do not create buttons - using gesture-based controls only
     
-    // Create left button
-    const leftBtn = document.createElement('button');
-    leftBtn.className = 'touch-btn left-btn';
-    leftBtn.innerHTML = '←';
-    leftBtn.addEventListener('touchstart', function(e) {
-        e.preventDefault();
-        const moveInterval = setInterval(function() {
-            if (!gameOver && !paused) p.moveLeft();
-        }, 100);
-        
-        leftBtn.addEventListener('touchend', function() {
-            clearInterval(moveInterval);
-        }, { once: true });
-    });
+    // Create touch instructions overlay
+    const touchInstructions = document.createElement('div');
+    touchInstructions.className = 'touch-instructions';
+    touchInstructions.innerHTML = `
+        <p>Swipe left/right: Move piece</p>
+        <p>Swipe down: Soft drop</p>
+        <p>Tap: Rotate right</p>
+        <p>Double tap: Hard drop</p>
+        <p>Two-finger tap: 3D rotate</p>
+    `;
+    document.body.appendChild(touchInstructions);
     
-    // Create right button
-    const rightBtn = document.createElement('button');
-    rightBtn.className = 'touch-btn right-btn';
-    rightBtn.innerHTML = '→';
-    rightBtn.addEventListener('touchstart', function(e) {
-        e.preventDefault();
-        const moveInterval = setInterval(function() {
-            if (!gameOver && !paused) p.moveRight();
-        }, 100);
-        
-        rightBtn.addEventListener('touchend', function() {
-            clearInterval(moveInterval);
-        }, { once: true });
-    });
-    
-    // Create down button
-    const downBtn = document.createElement('button');
-    downBtn.className = 'touch-btn down-btn';
-    downBtn.innerHTML = '↓';
-    downBtn.addEventListener('touchstart', function(e) {
-        e.preventDefault();
-        const moveInterval = setInterval(function() {
-            if (!gameOver && !paused) p.moveDown();
-        }, 100);
-        
-        downBtn.addEventListener('touchend', function() {
-            clearInterval(moveInterval);
-        }, { once: true });
-    });
-    
-    // Create rotate button
-    const rotateBtn = document.createElement('button');
-    rotateBtn.className = 'touch-btn rotate-btn';
-    rotateBtn.innerHTML = '↻';
-    rotateBtn.addEventListener('touchstart', function(e) {
-        e.preventDefault();
-        if (!gameOver && !paused) p.rotate('right');
-    });
-    
-    // Create 3D buttons
-    const rotate3DXBtn = document.createElement('button');
-    rotate3DXBtn.className = 'touch-btn rotate3d-x-btn';
-    rotate3DXBtn.innerHTML = 'W';
-    rotate3DXBtn.addEventListener('touchstart', function(e) {
-        e.preventDefault();
-        if (!gameOver && !paused) p.rotate3DX();
-    });
-    
-    const rotate3DYBtn = document.createElement('button');
-    rotate3DYBtn.className = 'touch-btn rotate3d-y-btn';
-    rotate3DYBtn.innerHTML = 'X';
-    rotate3DYBtn.addEventListener('touchstart', function(e) {
-        e.preventDefault();
-        if (!gameOver && !paused) p.rotate3DY();
-    });
-    
-    // Create hard drop button
-    const hardDropBtn = document.createElement('button');
-    hardDropBtn.className = 'touch-btn hard-drop-btn';
-    hardDropBtn.innerHTML = '⤓';
-    hardDropBtn.addEventListener('touchstart', function(e) {
-        e.preventDefault();
-        if (!gameOver && !paused) p.hardDrop();
-    });
-    
-    // Add all buttons to the container
-    controlsContainer.appendChild(leftBtn);
-    controlsContainer.appendChild(rightBtn);
-    controlsContainer.appendChild(downBtn);
-    controlsContainer.appendChild(rotateBtn);
-    controlsContainer.appendChild(rotate3DXBtn);
-    controlsContainer.appendChild(rotate3DYBtn);
-    controlsContainer.appendChild(hardDropBtn);
+    // Show instructions briefly, then fade out
+    setTimeout(() => {
+        touchInstructions.classList.add('fade-out');
+        setTimeout(() => {
+            touchInstructions.style.display = 'none';
+        }, 1000);
+    }, 5000);
 }
 
 // Start the game
