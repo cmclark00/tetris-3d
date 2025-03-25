@@ -13,6 +13,10 @@ const PREVIEW_BLOCK_SIZE = 25;
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 let touchControls = false;
 
+// 7-bag randomization variables
+let pieceBag = [];
+let nextBag = [];
+
 // Set canvas dimensions to match game board
 canvas.width = COLS * BLOCK_SIZE;
 canvas.height = ROWS * BLOCK_SIZE;
@@ -1510,11 +1514,13 @@ function drawBoard() {
 
 // Generate random piece
 function randomPiece() {
-    let randomN = Math.floor(Math.random() * PIECES.length);
-    let randomTetromino = PIECES[randomN];
-    let randomIndex = Math.floor(Math.random() * randomTetromino.length);
+    // Initialize bags if they're empty
+    if (pieceBag.length === 0 && nextBag.length === 0) {
+        pieceBag = generateBag();
+        nextBag = generateBag();
+    }
     
-    return new Piece(randomTetromino, randomIndex, COLORS[randomN]);
+    return getNextPieceFromBag();
 }
 
 // Play piece movement sounds
@@ -1844,6 +1850,7 @@ function init() {
 function handleResize() {
     const gameContainer = document.querySelector('.game-container');
     const gameWrapper = document.querySelector('.game-wrapper');
+    const scoreContainer = document.querySelector('.score-container');
     
     if (isMobile || forceMobileControls) {
         // Scale the canvas to fit mobile screen
@@ -1855,41 +1862,41 @@ function handleResize() {
         
         // Calculate available game area (accounting for UI elements)
         const titleHeight = 40; // Estimate for title
-        const scoreHeight = isPortrait ? 120 : 0; // In portrait, score is above/below game
-        const availableHeight = viewportHeight - titleHeight - scoreHeight;
+        const scoreWidth = isPortrait ? 120 : 100; // Width for score container in portrait/landscape
+        const availableWidth = viewportWidth - scoreWidth - 20; // Subtract score width + padding
+        const availableHeight = viewportHeight - titleHeight - 20; // Subtract title height + padding
         
-        // For portrait: maximize width, maintain aspect ratio
+        // Calculate optimal dimensions while maintaining aspect ratio
+        const gameRatio = ROWS / COLS;
+        
+        // Calculate scale based on available space
+        let targetWidth, targetHeight;
+        
         if (isPortrait) {
-            // Use 90% of viewport width
-            const targetWidth = viewportWidth * 0.9;
-            const targetHeight = (targetWidth / COLS) * ROWS;
+            // For portrait, prioritize fitting the width
+            targetWidth = availableWidth * 0.95;
+            targetHeight = targetWidth * gameRatio;
             
-            // If height is too tall, scale down
-            if (targetHeight > availableHeight * 0.8) {
-                const scaleFactor = (availableHeight * 0.8) / targetHeight;
-                canvas.style.width = `${targetWidth * scaleFactor}px`;
-                canvas.style.height = `${targetHeight * scaleFactor}px`;
-            } else {
-                canvas.style.width = `${targetWidth}px`;
-                canvas.style.height = `${targetHeight}px`;
+            // If too tall, scale down based on height
+            if (targetHeight > availableHeight * 0.95) {
+                targetHeight = availableHeight * 0.95;
+                targetWidth = targetHeight / gameRatio;
             }
-        } 
-        // For landscape: maximize height, maintain aspect ratio
-        else {
-            // Use 75% of available height
-            const targetHeight = availableHeight * 0.75;
-            const targetWidth = (targetHeight / ROWS) * COLS;
+        } else {
+            // For landscape, prioritize fitting the height
+            targetHeight = availableHeight * 0.95;
+            targetWidth = targetHeight / gameRatio;
             
-            // If width is too wide, scale down
-            if (targetWidth > viewportWidth * 0.6) {
-                const scaleFactor = (viewportWidth * 0.6) / targetWidth;
-                canvas.style.width = `${targetWidth * scaleFactor}px`;
-                canvas.style.height = `${targetHeight * scaleFactor}px`;
-            } else {
-                canvas.style.width = `${targetWidth}px`;
-                canvas.style.height = `${targetHeight}px`;
+            // If too wide, scale down based on width
+            if (targetWidth > availableWidth * 0.95) {
+                targetWidth = availableWidth * 0.95;
+                targetHeight = targetWidth * gameRatio;
             }
         }
+        
+        // Apply dimensions
+        canvas.style.width = `${targetWidth}px`;
+        canvas.style.height = `${targetHeight}px`;
         
         // Force a redraw of the nextPiece preview to fix rendering issues
         if (nextPiece) {
@@ -1905,10 +1912,6 @@ function handleResize() {
         // Reset to desktop layout
         canvas.style.width = '';
         canvas.style.height = '';
-        
-        if (nextPieceCanvas) {
-            nextPieceCanvas.style.transform = 'none';
-        }
         
         document.body.classList.remove('mobile-mode');
     }
@@ -2384,6 +2387,40 @@ function lockPiece() {
     
     // Play drop sound
     playSound(dropSound);
+}
+
+// Generate pieces using 7-bag randomization
+function generateBag() {
+    // Create array with indices 0-6 (one for each piece type)
+    let bag = [0, 1, 2, 3, 4, 5, 6];
+    
+    // Fisher-Yates shuffle algorithm
+    for (let i = bag.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [bag[i], bag[j]] = [bag[j], bag[i]]; // Swap elements
+    }
+    
+    return bag;
+}
+
+// Get next piece from the bag
+function getNextPieceFromBag() {
+    // If the current bag is empty, use the prepared next bag
+    if (pieceBag.length === 0) {
+        pieceBag = nextBag.slice();
+        // Generate new bag for next time
+        nextBag = generateBag();
+    }
+    
+    // Take the first piece from the bag
+    const pieceIndex = pieceBag.shift();
+    const tetromino = PIECES[pieceIndex];
+    const color = COLORS[pieceIndex];
+    
+    // Random rotation/orientation
+    const randomIndex = Math.floor(Math.random() * tetromino.length);
+    
+    return new Piece(tetromino, randomIndex, color);
 }
 
 // Start the game
