@@ -535,7 +535,8 @@ class Piece {
         } else {
             // If can't move down, lock the piece
             this.lock();
-            p = randomPiece();
+            // Replace with getNextPiece function call instead of direct assignment
+            getNextPiece();
             p.calculateShadowY(); // Calculate shadow for new piece
         }
         
@@ -652,8 +653,8 @@ class Piece {
         // Lock the piece
         this.lock();
         
-        // Get new piece
-        p = randomPiece();
+        // Replace with getNextPiece function call instead of direct assignment
+        getNextPiece();
         
         // Calculate shadow for new piece
         p.calculateShadowY();
