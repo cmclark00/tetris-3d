@@ -61,7 +61,9 @@ Access the options menu to customize your gameplay experience:
 
 ## Live Demo
 
-Visit [https://github.com/cmclark00/tetris-3d](https://github.com/cmclark00/tetris-3d) to access the repository.
+Play the game directly in your browser: [Tetris 3D Live Demo](https://cmclark00.github.io/tetris-3d/)
+
+Repository: [https://github.com/cmclark00/tetris-3d](https://github.com/cmclark00/tetris-3d)
 
 ## Credits
 
