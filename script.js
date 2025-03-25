@@ -9,6 +9,10 @@ const BLOCK_SIZE = 30;
 const EMPTY = 'black';
 const PREVIEW_BLOCK_SIZE = 25;
 
+// Mobile detection
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+let touchControls = false;
+
 // Set canvas dimensions to match game board
 canvas.width = COLS * BLOCK_SIZE;
 canvas.height = ROWS * BLOCK_SIZE;
@@ -33,6 +37,7 @@ const optionsModal = document.getElementById('options-modal');
 const toggle3DEffects = document.getElementById('toggle-3d-effects');
 const toggleSpinAnimations = document.getElementById('toggle-spin-animations');
 const animationSpeedSlider = document.getElementById('animation-speed');
+const toggleMobileControls = document.getElementById('toggle-mobile-controls');
 
 // Controller elements
 const controllerStatus = document.getElementById('controller-status');
@@ -57,6 +62,7 @@ let showShadow = true; // Toggle shadow display
 let enable3DEffects = true;
 let enableSpinAnimations = true;
 let animationSpeed = 0.05;
+let forceMobileControls = false;
 
 // Controller variables
 let gamepadConnected = false;
@@ -1686,49 +1692,51 @@ function applyOptions() {
     enable3DEffects = toggle3DEffects.checked;
     enableSpinAnimations = toggleSpinAnimations.checked;
     animationSpeed = parseFloat(animationSpeedSlider.value);
+    forceMobileControls = toggleMobileControls.checked;
     
-    // If 3D effects are disabled, also disable spin animations
-    if (!enable3DEffects) {
-        toggleSpinAnimations.disabled = true;
-    } else {
-        toggleSpinAnimations.disabled = false;
+    // Apply mobile controls if checked or if on mobile device
+    if (forceMobileControls) {
+        if (!touchControls) {
+            initTouchControls();
+            touchControls = true;
+        }
+        document.body.classList.add('mobile-mode');
+    } else if (!isMobile) {
+        document.body.classList.remove('mobile-mode');
     }
     
-    // Save options in localStorage
+    // Save options
     saveOptions();
 }
 
 // Save options to localStorage
 function saveOptions() {
-    const options = {
+    localStorage.setItem('tetris3DOptions', JSON.stringify({
         enable3DEffects,
         enableSpinAnimations,
-        animationSpeed
-    };
-    
-    localStorage.setItem('tetris3dOptions', JSON.stringify(options));
+        animationSpeed,
+        forceMobileControls
+    }));
 }
 
 // Load options from localStorage
 function loadOptions() {
-    const savedOptions = localStorage.getItem('tetris3dOptions');
-    
+    const savedOptions = localStorage.getItem('tetris3DOptions');
     if (savedOptions) {
         const options = JSON.parse(savedOptions);
         
-        // Apply saved options
-        enable3DEffects = options.enable3DEffects;
-        enableSpinAnimations = options.enableSpinAnimations;
-        animationSpeed = options.animationSpeed;
+        enable3DEffects = options.enable3DEffects !== undefined ? options.enable3DEffects : true;
+        enableSpinAnimations = options.enableSpinAnimations !== undefined ? options.enableSpinAnimations : true;
+        animationSpeed = options.animationSpeed !== undefined ? options.animationSpeed : 0.05;
+        forceMobileControls = options.forceMobileControls !== undefined ? options.forceMobileControls : false;
         
         // Update UI controls
         toggle3DEffects.checked = enable3DEffects;
         toggleSpinAnimations.checked = enableSpinAnimations;
         animationSpeedSlider.value = animationSpeed;
         
-        // Update UI state
-        if (!enable3DEffects) {
-            toggleSpinAnimations.disabled = true;
+        if (toggleMobileControls) {
+            toggleMobileControls.checked = forceMobileControls;
         }
     }
 }
@@ -1756,6 +1764,12 @@ function init() {
     // Listen for keyboard events
     document.addEventListener('keydown', control);
     
+    // Add resize listener for responsive layout
+    window.addEventListener('resize', handleResize);
+    
+    // Initial resize to set correct dimensions
+    handleResize();
+    
     // Button event listeners
     startBtn.addEventListener('click', resetGame);
     pauseBtn.addEventListener('click', togglePause);
@@ -1777,11 +1791,76 @@ function init() {
         applyOptions();
     });
     
+    if (toggleMobileControls) {
+        toggleMobileControls.addEventListener('change', function() {
+            applyOptions();
+            
+            // Force resize to update layout
+            window.dispatchEvent(new Event('resize'));
+        });
+    }
+    
+    // Apply mobile mode if forced or on mobile device
+    if (forceMobileControls || isMobile) {
+        if (!touchControls) {
+            initTouchControls();
+            touchControls = true;
+        }
+        document.body.classList.add('mobile-mode');
+    }
+    
     // Initialize controller support
     initControllerSupport();
     
     // Initial controller status update
     updateControllerStatus();
+}
+
+// Handle window resize for responsive layout
+function handleResize() {
+    const gameContainer = document.querySelector('.game-container');
+    const gameWrapper = document.querySelector('.game-wrapper');
+    
+    if (isMobile) {
+        // Scale the canvas to fit mobile screen
+        const viewportWidth = Math.min(window.innerWidth, document.documentElement.clientWidth);
+        const viewportHeight = Math.min(window.innerHeight, document.documentElement.clientHeight);
+        
+        // Calculate optimal scale while maintaining aspect ratio
+        const scaleWidth = (viewportWidth * 0.85) / (COLS * BLOCK_SIZE);
+        const scaleHeight = (viewportHeight * 0.6) / (ROWS * BLOCK_SIZE);
+        const scale = Math.min(scaleWidth, scaleHeight, 1); // Don't scale up beyond 1
+        
+        // Apply scale transform to canvas
+        canvas.style.transform = `scale(${scale})`;
+        canvas.style.transformOrigin = 'top left';
+        
+        // Adjust container width based on scaled canvas
+        if (gameWrapper) {
+            gameWrapper.style.width = `${(COLS * BLOCK_SIZE) * scale}px`;
+            gameWrapper.style.height = `${(ROWS * BLOCK_SIZE) * scale}px`;
+        }
+        
+        // Scale next piece preview
+        if (nextPieceCanvas) {
+            nextPieceCanvas.style.transform = `scale(${scale})`;
+            nextPieceCanvas.style.transformOrigin = 'top left';
+        }
+        
+        // Show touch controls
+        document.body.classList.add('mobile-mode');
+    } else {
+        // Reset to desktop layout
+        canvas.style.transform = 'none';
+        if (gameWrapper) {
+            gameWrapper.style.width = '';
+            gameWrapper.style.height = '';
+        }
+        if (nextPieceCanvas) {
+            nextPieceCanvas.style.transform = 'none';
+        }
+        document.body.classList.remove('mobile-mode');
+    }
 }
 
 // Toggle shadow display
@@ -2045,9 +2124,198 @@ function clearPreviousPiecePosition() {
     }
 }
 
+// Touch control variables
+let touchStartX = 0;
+let touchStartY = 0;
+let touchStartTime = 0;
+const SWIPE_THRESHOLD = 30;
+const TAP_THRESHOLD = 200; // milliseconds
+const DOUBLE_TAP_THRESHOLD = 300; // milliseconds
+let lastTapTime = 0;
+
+// Initialize touch controls
+function initTouchControls() {
+    // Add touch event listeners to the canvas
+    canvas.addEventListener('touchstart', handleTouchStart, false);
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd, false);
+    
+    // Create on-screen control buttons
+    createTouchControlButtons();
+}
+
+// Handle touch start event
+function handleTouchStart(event) {
+    if (gameOver || paused) return;
+    event.preventDefault();
+    
+    // Store the initial touch position
+    const touch = event.touches[0];
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+    touchStartTime = Date.now();
+}
+
+// Handle touch move event
+function handleTouchMove(event) {
+    if (gameOver || paused) return;
+    event.preventDefault();
+    
+    if (!event.touches.length) return;
+    
+    const touch = event.touches[0];
+    const diffX = touch.clientX - touchStartX;
+    const diffY = touch.clientY - touchStartY;
+    
+    // Detect horizontal swipe for movement
+    if (Math.abs(diffX) > SWIPE_THRESHOLD) {
+        if (diffX > 0) {
+            p.moveRight();
+        } else {
+            p.moveLeft();
+        }
+        
+        // Reset touch start to allow for continuous movement
+        touchStartX = touch.clientX;
+    }
+    
+    // Detect downward swipe for soft drop
+    if (diffY > SWIPE_THRESHOLD) {
+        p.moveDown();
+        touchStartY = touch.clientY;
+    }
+}
+
+// Handle touch end event
+function handleTouchEnd(event) {
+    if (gameOver || paused) return;
+    event.preventDefault();
+    
+    const touchEndTime = Date.now();
+    const touchDuration = touchEndTime - touchStartTime;
+    
+    // Check for tap (quick touch)
+    if (touchDuration < TAP_THRESHOLD) {
+        // Check for double tap (for hard drop)
+        if (touchEndTime - lastTapTime < DOUBLE_TAP_THRESHOLD) {
+            p.hardDrop();
+            lastTapTime = 0; // Reset to prevent triple-tap detection
+        } else {
+            // Single tap rotates piece
+            p.rotate('right');
+            lastTapTime = touchEndTime;
+        }
+    }
+}
+
+// Create on-screen control buttons for mobile
+function createTouchControlButtons() {
+    const controlsContainer = document.createElement('div');
+    controlsContainer.className = 'touch-controls-container';
+    document.body.appendChild(controlsContainer);
+    
+    // Create left button
+    const leftBtn = document.createElement('button');
+    leftBtn.className = 'touch-btn left-btn';
+    leftBtn.innerHTML = '←';
+    leftBtn.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        const moveInterval = setInterval(function() {
+            if (!gameOver && !paused) p.moveLeft();
+        }, 100);
+        
+        leftBtn.addEventListener('touchend', function() {
+            clearInterval(moveInterval);
+        }, { once: true });
+    });
+    
+    // Create right button
+    const rightBtn = document.createElement('button');
+    rightBtn.className = 'touch-btn right-btn';
+    rightBtn.innerHTML = '→';
+    rightBtn.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        const moveInterval = setInterval(function() {
+            if (!gameOver && !paused) p.moveRight();
+        }, 100);
+        
+        rightBtn.addEventListener('touchend', function() {
+            clearInterval(moveInterval);
+        }, { once: true });
+    });
+    
+    // Create down button
+    const downBtn = document.createElement('button');
+    downBtn.className = 'touch-btn down-btn';
+    downBtn.innerHTML = '↓';
+    downBtn.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        const moveInterval = setInterval(function() {
+            if (!gameOver && !paused) p.moveDown();
+        }, 100);
+        
+        downBtn.addEventListener('touchend', function() {
+            clearInterval(moveInterval);
+        }, { once: true });
+    });
+    
+    // Create rotate button
+    const rotateBtn = document.createElement('button');
+    rotateBtn.className = 'touch-btn rotate-btn';
+    rotateBtn.innerHTML = '↻';
+    rotateBtn.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        if (!gameOver && !paused) p.rotate('right');
+    });
+    
+    // Create 3D buttons
+    const rotate3DXBtn = document.createElement('button');
+    rotate3DXBtn.className = 'touch-btn rotate3d-x-btn';
+    rotate3DXBtn.innerHTML = 'W';
+    rotate3DXBtn.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        if (!gameOver && !paused) p.rotate3DX();
+    });
+    
+    const rotate3DYBtn = document.createElement('button');
+    rotate3DYBtn.className = 'touch-btn rotate3d-y-btn';
+    rotate3DYBtn.innerHTML = 'X';
+    rotate3DYBtn.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        if (!gameOver && !paused) p.rotate3DY();
+    });
+    
+    // Create hard drop button
+    const hardDropBtn = document.createElement('button');
+    hardDropBtn.className = 'touch-btn hard-drop-btn';
+    hardDropBtn.innerHTML = '⤓';
+    hardDropBtn.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        if (!gameOver && !paused) p.hardDrop();
+    });
+    
+    // Add all buttons to the container
+    controlsContainer.appendChild(leftBtn);
+    controlsContainer.appendChild(rightBtn);
+    controlsContainer.appendChild(downBtn);
+    controlsContainer.appendChild(rotateBtn);
+    controlsContainer.appendChild(rotate3DXBtn);
+    controlsContainer.appendChild(rotate3DYBtn);
+    controlsContainer.appendChild(hardDropBtn);
+}
+
 // Start the game
 window.onload = function() {
     init();
     update(); // Start the fireworks update loop
     draw();   // Start the drawing loop
+    
+    // Initialize touch controls if on mobile device
+    if (isMobile) {
+        initTouchControls();
+        touchControls = true;
+        
+        // Force resize to ensure proper mobile layout
+        window.dispatchEvent(new Event('resize'));
+    }
 }; 

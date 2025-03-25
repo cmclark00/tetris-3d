@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>3D Tetris</title>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -96,6 +98,13 @@
             <div class="option-row">
                 <label>Animation Speed: </label>
                 <input type="range" id="animation-speed" min="0.01" max="0.2" step="0.01" value="0.05">
+            </div>
+            <div class="option-row">
+                <label>Mobile Controls: </label>
+                <label class="switch">
+                    <input type="checkbox" id="toggle-mobile-controls">
+                    <span class="slider round"></span>
+                </label>
             </div>
             <button id="options-close-btn" class="game-btn">Close</button>
         </div>
