@@ -2185,7 +2185,7 @@ let touchStartY = 0;
 let touchStartTime = 0;
 const SWIPE_THRESHOLD = 15; // Reduced threshold for more responsive movement
 const TAP_THRESHOLD = 200; // milliseconds
-const DOUBLE_TAP_THRESHOLD = 400; // Increased to prevent accidental double-taps
+const DOUBLE_TAP_THRESHOLD = 300; // Reduced from 400 to make double-tap easier
 const TRIPLE_TAP_THRESHOLD = 600; // Maximum time between first and third tap
 let lastTapTime = 0;
 let secondLastTapTime = 0; // Track time of second-to-last tap for triple tap detection
@@ -2195,7 +2195,7 @@ let lastTapX = 0;
 let lastTapY = 0;
 let secondLastTapX = 0; // Track position of second-to-last tap
 let secondLastTapY = 0; // Track position of second-to-last tap
-const TAP_DISTANCE_THRESHOLD = 20; // Maximum distance to consider as same-position tap
+const TAP_DISTANCE_THRESHOLD = 40; // Increased from 20 to be more forgiving for double-taps
 const MOVE_COOLDOWN = 60; // Cooldown between moves to prevent too rapid movement
 
 // Initialize touch controls
@@ -2318,40 +2318,39 @@ function handleTouchEnd(event) {
         
         // Check for double tap (for hard drop)
         const timeBetweenTaps = touchEndTime - lastTapTime;
-        if (timeBetweenTaps < DOUBLE_TAP_THRESHOLD && distanceFromLastTap < TAP_DISTANCE_THRESHOLD) {
-            // Track second tap for potential triple tap
+        
+        if (lastTapTime > 0 && timeBetweenTaps < DOUBLE_TAP_THRESHOLD && distanceFromLastTap < TAP_DISTANCE_THRESHOLD) {
+            // This is a double-tap, do hard drop
+            p.hardDrop();
+            
+            // Store for potential triple tap
             secondLastTapTime = lastTapTime;
             secondLastTapX = lastTapX;
             secondLastTapY = lastTapY;
-            
-            // Update last tap
             lastTapTime = touchEndTime;
             lastTapX = touchX;
             lastTapY = touchY;
             
-            // If we already have a second tap recorded, this is too far from triple tap time
-            if (touchEndTime - secondLastTapTime > DOUBLE_TAP_THRESHOLD) {
-                p.hardDrop();
-                lastTapTime = 0;
-                secondLastTapTime = 0;
-            }
-        } else {
-            // Single tap - rotates piece and resets tap tracking
-            if (lastTapTime === 0) {
-                // First tap
-                p.rotate('right');
-                lastTapTime = touchEndTime;
-                lastTapX = touchX;
-                lastTapY = touchY;
-            } else {
-                // Too far from last tap position - treat as new first tap
-                p.rotate('right');
-                secondLastTapTime = 0;
-                lastTapTime = touchEndTime;
-                lastTapX = touchX;
-                lastTapY = touchY;
-            }
+            // Debug
+            console.log("Double tap detected - hard drop");
+            return;
+        } 
+        
+        // Single tap - rotates piece
+        p.rotate('right');
+        
+        // Update tracking for potential double/triple tap
+        if (lastTapTime > 0) {
+            // Store previous tap data
+            secondLastTapTime = lastTapTime;
+            secondLastTapX = lastTapX;
+            secondLastTapY = lastTapY;
         }
+        
+        // Set current tap as the last tap
+        lastTapTime = touchEndTime;
+        lastTapX = touchX;
+        lastTapY = touchY;
     }
     
     // Reset touch identifier

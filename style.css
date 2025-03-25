@@ -80,6 +80,7 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: space-around;
+    width: 180px; /* Ensure width is sufficient */
 }
 
 .score-container p {
@@ -148,10 +149,10 @@ canvas {
 }
 
 #next-piece-preview {
-    position: absolute;
-    top: 0;
-    left: 100%; /* Position it outside the right edge of game wrapper */
-    margin-left: 20px; /* Add a margin between the game and preview */
+    position: relative; /* Change from absolute to relative */
+    top: auto;
+    left: auto; /* Remove positioning outside game wrapper */
+    margin: 0 0 15px 0; /* Add bottom margin instead of left margin */
     background: rgba(51, 51, 51, 0.8);
     padding: 10px;
     border-radius: 8px;
@@ -160,8 +161,9 @@ canvas {
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 160px; /* Increased width */
-    z-index: 5; /* Lower z-index than controls */
+    width: 90%; /* Adjust width to fit score container better */
+    box-sizing: border-box;
+    z-index: 5;
 }
 
 #next-piece-preview h3 {
@@ -177,18 +179,18 @@ canvas {
 }
 
 .controls-info {
-    min-width: 260px; /* Further increased min-width */
-    max-width: 260px; /* Further increased max-width */
+    min-width: 260px;
+    max-width: 260px;
     padding: 15px;
     background: rgba(51, 51, 51, 0.8);
     border-radius: 8px;
     border: 2px solid #444;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-    max-height: 640px; /* Match game board height */
-    overflow-y: auto; /* Add scroll if contents exceed height */
-    position: relative; /* Added position relative */
-    z-index: 15; /* Added z-index to ensure it appears above other elements */
-    margin-left: 160px; /* Slightly reduced from 200px for more unified look */
+    max-height: 640px;
+    overflow-y: auto;
+    position: relative;
+    z-index: 15;
+    margin-left: 20px; /* Reduce from 160px to 20px */
 }
 
 .controls-info h3 {
