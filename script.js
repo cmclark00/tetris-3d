@@ -86,8 +86,19 @@ let controllerMapping = {
     pause: [9, 'start']         // Start button
 };
 let lastControllerState = {};
-let controllerPollingRate = 100; // ms
+let controllerPollingRate = 16; // Increased polling rate (from 100ms to 16ms for ~60fps)
 let controllerInterval;
+let buttonHoldDelays = {
+    left: 150,    // Initial delay before repeating
+    right: 150,   // Initial delay before repeating
+    down: 50      // Fast repeat for down
+};
+let buttonRepeatRates = {
+    left: 100,    // Repeat rate after initial delay
+    right: 100,   // Repeat rate after initial delay
+    down: 50      // Fast repeat rate for down
+};
+let buttonHoldTimers = {};
 
 // Fireworks array
 let fireworks = [];
@@ -576,77 +587,66 @@ class Piece {
     
     // Rotate with 3D animation
     rotate(direction) {
-        // Direction can be 'right' or 'left'
-        if (gameOver || paused) return;
+        // Skip if already in an animation
+        if (this.rotationTransition || this.showCompletionEffect) {
+            return;
+        }
         
-        // Square piece (O) doesn't rotate
+        // Reset animation state
+        this.resetAnimationState();
+        
+        // Square pieces (O) don't need to rotate
         if (this.tetrominoType === 'O') {
             return;
         }
         
+        // If animations are disabled, do simple rotation
+        if (!enableSpinAnimations || !enable3DEffects) {
+            // Use standard rotation without animation
+            let nextPattern = (direction === 'right') ? 
+                (this.tetrominoN + 1) % this.tetromino.length : 
+                (this.tetrominoN + this.tetromino.length - 1) % this.tetromino.length;
+            
+            // Try to rotate and apply kicks if needed
+            const kickResult = this.tryRotateWithKicks(nextPattern);
+            
+            if (kickResult.success) {
+                // Apply rotation
+                this.x += kickResult.kick;
+                this.tetrominoN = nextPattern;
+                this.activeTetromino = this.tetromino[this.tetrominoN];
+                this.shadowTetromino = this.activeTetromino;
+                
+                // Update shadow
+                this.calculateShadowY();
+                
+                // Play sound
+                playPieceSound('rotate');
+            }
+            
+            // Draw the piece
+            this.draw();
+            return;
+        }
+
+        // Find the next pattern based on rotation direction
+        let nextPattern = (direction === 'right') ? 
+            (this.tetrominoN + 1) % this.tetromino.length : 
+            (this.tetrominoN + this.tetromino.length - 1) % this.tetromino.length;
+        
+        // Try to rotate with kicks
+        const kickResult = this.tryRotateWithKicks(nextPattern);
+        
+        if (!kickResult.success) {
+            return; // Rotation failed
+        }
+        
+        // We found a valid kick - save for animation completion
+        const validKick = kickResult.kick;
+        
         // Clear previous position
         this.undraw();
         clearPreviousPiecePosition();
-        
-        // For I tetromino, rotation pattern is different (cycles through 0-1)
-        // For other tetrominoes, it cycles through 0-1-2-3
-        let nextPattern;
-        
-        if (direction === 'right') {
-            // Rotate clockwise
-            if (this.tetrominoType === 'I') {
-                nextPattern = (this.tetrominoN + 1) % 2;
-            } else {
-                nextPattern = (this.tetrominoN + 1) % 4;
-            }
-        } else if (direction === 'left') {
-            // Rotate counter-clockwise
-            if (this.tetrominoType === 'I') {
-                nextPattern = (this.tetrominoN - 1 + 2) % 2;
-            } else {
-                nextPattern = (this.tetrominoN - 1 + 4) % 4;
-            }
-        }
-        
-        // Wall kick testing for rotation
-        // Try the standard position first, then the kickTable positions
-        const kicks = this.getKicks(this.tetrominoN, nextPattern);
-        
-        // Try each kick position until we find one that works
-        let validKick = null;
-        
-        for (let i = 0; i < kicks.length; i++) {
-            const [kickX, kickY] = kicks[i];
-            
-            if (!this.collision(kickX, kickY, this.tetromino[nextPattern])) {
-                validKick = kickX;
-                // If a successful position is found, break the loop
-                break;
-            }
-        }
-        
-        // If no valid kick position found, keep the original position
-        if (validKick === null) {
-            this.draw();
-            return;
-        }
-        
-        // If animations disabled, apply rotation immediately
-        if (!enableSpinAnimations) {
-            this.x += validKick;
-            this.tetrominoN = nextPattern;
-            this.activeTetromino = this.tetromino[this.tetrominoN];
-            this.shadowTetromino = this.activeTetromino;
-            
-            // Play rotation sound
-            playPieceSound('rotate');
-            
-            // Update shadow position
-            this.calculateShadowY();
-            
-            this.draw();
-            return;
-        }
         
         // Store for animation completion
         this.targetPattern = nextPattern;
@@ -675,20 +675,14 @@ class Piece {
             return;
         }
         
-        // Cancel any ongoing rotations or animations
-        this.rotationTransition = false;
-        this.showCompletionEffect = false;
-        this.rotationAngleX = 0;
-        this.rotationAngleY = 0;
-        this.rotationAngleZ = 0;
+        // First, completely reset all animation state variables
+        // to prevent any lingering effects from rotations
+        this.resetAnimationState();
         
-        // Clear rotation state completely
-        this.rotationDirection = null;
-        this.targetTetromino = null;
-        this.targetPattern = undefined;
-        this.targetKick = undefined;
-        this.originalTetromino = null;
-        this.rotationProgress = 0;
+        // Save current state for proper undraw
+        const currentTetromino = this.activeTetromino;
+        const currentX = this.x;
+        const currentY = this.y;
         
         // Clear previous position
         this.undraw();
@@ -699,10 +693,10 @@ class Piece {
             this.y++;
         }
         
-        // Lock the piece
+        // Lock the piece at its final position
         this.lock();
         
-        // Replace with getNextPiece function call instead of direct assignment
+        // Get the next piece
         getNextPiece();
         
         // Calculate shadow for new piece
@@ -715,12 +709,37 @@ class Piece {
         playPieceSound('hardDrop');
     }
     
+    // Reset all animation state
+    resetAnimationState() {
+        this.rotationTransition = false;
+        this.showCompletionEffect = false;
+        this.rotationAngleX = 0;
+        this.rotationAngleY = 0;
+        this.rotationAngleZ = 0;
+        this.rotationDirection = null;
+        this.rotationProgress = 0;
+        this.rotationEasing = false;
+        this.completionEffectProgress = 0;
+        this.targetTetromino = null;
+        this.targetPattern = undefined;
+        this.targetKick = undefined;
+        this.originalTetromino = null;
+    }
+    
     // 3D horizontal rotation effect (around Y axis)
     rotate3DY() {
         // Square pieces (O) shouldn't rotate
         if (this.tetrominoType === 'O') {
             return;
         }
+        
+        // Skip if already in an animation
+        if (this.rotationTransition || this.showCompletionEffect) {
+            return;
+        }
+        
+        // Reset animation state
+        this.resetAnimationState();
         
         // Clear previous position
         this.undraw();
@@ -782,6 +801,14 @@ class Piece {
         if (this.tetrominoType === 'O') {
             return;
         }
+        
+        // Skip if already in an animation
+        if (this.rotationTransition || this.showCompletionEffect) {
+            return;
+        }
+        
+        // Reset animation state
+        this.resetAnimationState();
         
         // Clear previous position
         this.undraw();
@@ -1316,6 +1343,24 @@ class Piece {
             return kickTable[key] || [[0, 0]];
         }
     }
+    
+    // Try rotation with wall kicks
+    tryRotateWithKicks(nextPattern) {
+        // Get kicks for this rotation
+        const kicks = this.getKicks(this.tetrominoN, nextPattern);
+        
+        // Try each kick position until we find one that works
+        for (let i = 0; i < kicks.length; i++) {
+            const [kickX, kickY] = kicks[i];
+            
+            if (!this.collision(kickX, kickY, this.tetromino[nextPattern])) {
+                return { success: true, kick: kickX };
+            }
+        }
+        
+        // No valid kick position found
+        return { success: false, kick: 0 };
+    }
 }
 
 
@@ -1765,9 +1810,48 @@ function dropPiece() {
 
 // Show game over modal
 function showGameOver() {
+    // Stop game interval
     clearInterval(gameInterval);
+    
+    // Clear all controller button hold timers
+    clearAllButtonHoldTimers();
+    
+    // Update final score
     finalScoreElement.textContent = score;
+    
+    // Show modal
     gameOverModal.classList.add('active');
+}
+
+// Clear all button hold timers
+function clearAllButtonHoldTimers() {
+    ['left', 'right', 'down'].forEach(action => {
+        if (buttonHoldTimers[action]) {
+            clearInterval(buttonHoldTimers[action]);
+            buttonHoldTimers[action] = null;
+        }
+    });
+}
+
+// Toggle pause
+function togglePause() {
+    if (gameOver) return;
+    
+    paused = !paused;
+    
+    if (paused) {
+        clearInterval(gameInterval);
+        // Clear all controller button hold timers
+        clearAllButtonHoldTimers();
+        pauseBtn.textContent = 'Resume';
+        // Show pause message
+        showMessage('PAUSED', 'Press P to Resume');
+    } else {
+        gameInterval = setInterval(dropPiece, Math.max(100, 1000 - (level * 100)));
+        pauseBtn.textContent = 'Pause';
+        // Hide pause message
+        hideMessage();
+    }
 }
 
 // Reset the game
@@ -1803,19 +1887,6 @@ function resetGame() {
     dropStart = Date.now();
     clearInterval(gameInterval);
     gameInterval = setInterval(dropPiece, 1000);
-}
-
-// Toggle pause
-function togglePause() {
-    paused = !paused;
-    
-    if (paused) {
-        clearInterval(gameInterval);
-        pauseBtn.textContent = "Resume";
-    } else {
-        gameInterval = setInterval(dropPiece, Math.max(100, 1000 - (level * 100)));
-        pauseBtn.textContent = "Pause";
-    }
 }
 
 // Toggle options modal
@@ -2074,7 +2145,7 @@ function initControllerSupport() {
         gamepadConnected = true;
         controllers[e.gamepad.index] = e.gamepad;
         
-        // Start polling for controller input if not already
+        // Start polling for controller input at faster rate
         if (!controllerInterval) {
             controllerInterval = setInterval(pollControllers, controllerPollingRate);
         }
@@ -2092,14 +2163,18 @@ function initControllerSupport() {
             gamepadConnected = false;
             clearInterval(controllerInterval);
             controllerInterval = null;
+            
+            // Clear any ongoing button holds
+            clearAllButtonHoldTimers();
         }
         
         // Show controller disconnected message
         showControllerMessage('Controller disconnected');
     });
     
-    // Initial scan
+    // Initial scan and setup
     if (Object.keys(controllers).length > 0) {
+        gamepadConnected = true;
         controllerInterval = setInterval(pollControllers, controllerPollingRate);
     }
 }
@@ -2132,9 +2207,12 @@ function pollControllers() {
     if (!lastControllerState[controller.index]) {
         lastControllerState[controller.index] = {
             buttons: Array(controller.buttons.length).fill(false),
-            axes: Array(controller.axes.length).fill(0)
+            axes: Array(controller.axes.length).fill(0),
+            holdStartTimes: {}
         };
     }
+    
+    const now = Date.now();
     
     // Check buttons
     for (let action in controllerMapping) {
@@ -2144,11 +2222,41 @@ function pollControllers() {
         if (buttonIndex >= 0 && buttonIndex < controller.buttons.length) {
             const button = controller.buttons[buttonIndex];
             const pressed = button.pressed || button.value > 0.5;
+            const wasPressed = lastControllerState[controller.index].buttons[buttonIndex];
             
-            // Check if this is a new press (wasn't pressed last time)
-            if (pressed && !lastControllerState[controller.index].buttons[buttonIndex]) {
-                // Handle controller action
+            // New button press (wasn't pressed last time)
+            if (pressed && !wasPressed) {
+                // Start tracking hold time for repeatable actions
+                if (['left', 'right', 'down'].includes(action)) {
+                    lastControllerState[controller.index].holdStartTimes[action] = now;
+                    // Clear any existing timers
+                    if (buttonHoldTimers[action]) {
+                        clearInterval(buttonHoldTimers[action]);
+                    }
+                    
+                    // Schedule repeating actions
+                    buttonHoldTimers[action] = setInterval(() => {
+                        if (gamepadConnected && !gameOver && !paused) {
+                            handleControllerAction(action);
+                        } else {
+                            // Stop repeating if game state changes
+                            clearInterval(buttonHoldTimers[action]);
+                            buttonHoldTimers[action] = null;
+                        }
+                    }, buttonRepeatRates[action]);
+                }
+                
+                // Immediate action on first press
                 handleControllerAction(action);
+            }
+            // Button released
+            else if (!pressed && wasPressed) {
+                // Stop repeating on release
+                if (['left', 'right', 'down'].includes(action) && buttonHoldTimers[action]) {
+                    clearInterval(buttonHoldTimers[action]);
+                    buttonHoldTimers[action] = null;
+                    delete lastControllerState[controller.index].holdStartTimes[action];
+                }
             }
             
             // Update state
@@ -2157,17 +2265,87 @@ function pollControllers() {
     }
     
     // Handle analog stick for movement
+    const deadzone = 0.5;
+    
     // Left stick horizontal
-    if (controller.axes[0] < -0.5 && lastControllerState[controller.index].axes[0] >= -0.5) {
-        handleControllerAction('left');
+    if (controller.axes[0] < -deadzone) {
+        if (lastControllerState[controller.index].axes[0] >= -deadzone) {
+            // Initial movement
+            handleControllerAction('left');
+            
+            // Setup holding behavior
+            lastControllerState[controller.index].holdStartTimes['left'] = now;
+            if (buttonHoldTimers['left']) clearInterval(buttonHoldTimers['left']);
+            
+            buttonHoldTimers['left'] = setInterval(() => {
+                if (gamepadConnected && !gameOver && !paused) {
+                    handleControllerAction('left');
+                } else {
+                    clearInterval(buttonHoldTimers['left']);
+                    buttonHoldTimers['left'] = null;
+                }
+            }, buttonRepeatRates['left']);
+        }
     } 
-    else if (controller.axes[0] > 0.5 && lastControllerState[controller.index].axes[0] <= 0.5) {
-        handleControllerAction('right');
+    else if (controller.axes[0] > deadzone) {
+        if (lastControllerState[controller.index].axes[0] <= deadzone) {
+            // Initial movement
+            handleControllerAction('right');
+            
+            // Setup holding behavior
+            lastControllerState[controller.index].holdStartTimes['right'] = now;
+            if (buttonHoldTimers['right']) clearInterval(buttonHoldTimers['right']);
+            
+            buttonHoldTimers['right'] = setInterval(() => {
+                if (gamepadConnected && !gameOver && !paused) {
+                    handleControllerAction('right');
+                } else {
+                    clearInterval(buttonHoldTimers['right']);
+                    buttonHoldTimers['right'] = null;
+                }
+            }, buttonRepeatRates['right']);
+        }
+    } 
+    else {
+        // Stick returned to center, clear horizontal timers
+        if (Math.abs(lastControllerState[controller.index].axes[0]) > deadzone) {
+            ['left', 'right'].forEach(action => {
+                if (buttonHoldTimers[action]) {
+                    clearInterval(buttonHoldTimers[action]);
+                    buttonHoldTimers[action] = null;
+                }
+            });
+        }
     }
     
-    // Left stick vertical
-    if (controller.axes[1] > 0.5 && lastControllerState[controller.index].axes[1] <= 0.5) {
-        handleControllerAction('down');
+    // Left stick vertical - down only
+    if (controller.axes[1] > deadzone) {
+        if (lastControllerState[controller.index].axes[1] <= deadzone) {
+            // Initial movement
+            handleControllerAction('down');
+            
+            // Setup holding behavior
+            lastControllerState[controller.index].holdStartTimes['down'] = now;
+            if (buttonHoldTimers['down']) clearInterval(buttonHoldTimers['down']);
+            
+            buttonHoldTimers['down'] = setInterval(() => {
+                if (gamepadConnected && !gameOver && !paused) {
+                    handleControllerAction('down');
+                } else {
+                    clearInterval(buttonHoldTimers['down']);
+                    buttonHoldTimers['down'] = null;
+                }
+            }, buttonRepeatRates['down']); // Faster repeat for down
+        }
+    } 
+    else {
+        // Stick returned to center, clear down timer
+        if (lastControllerState[controller.index].axes[1] > deadzone) {
+            if (buttonHoldTimers['down']) {
+                clearInterval(buttonHoldTimers['down']);
+                buttonHoldTimers['down'] = null;
+            }
+        }
     }
     
     // Update axes state
