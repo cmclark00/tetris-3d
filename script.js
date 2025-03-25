@@ -670,6 +670,13 @@ class Piece {
     
     // Hard drop
     hardDrop() {
+        // Cancel any ongoing rotations or animations
+        this.rotationTransition = false;
+        this.showCompletionEffect = false;
+        this.rotationAngleX = 0;
+        this.rotationAngleY = 0;
+        this.rotationAngleZ = 0;
+        
         // Clear previous position
         this.undraw();
         clearPreviousPiecePosition();
@@ -2402,21 +2409,26 @@ function handleTouchEnd(event) {
             // This is a double-tap, do hard drop
             p.hardDrop();
             
-            // Reset tap tracking
+            // Reset tap tracking to prevent any further actions
             lastTapTime = 0;
+            lastTapX = 0;
+            lastTapY = 0;
             
             // Debug
             console.log("Double tap detected - hard drop");
             return;
         } 
         
-        // Single tap - rotates piece
-        p.rotate('right');
-        
-        // Update tracking for potential double tap
-        lastTapTime = touchEndTime;
-        lastTapX = touchX;
-        lastTapY = touchY;
+        // Only rotate if we're not in the middle of another action
+        if (!p.rotationTransition && !p.showCompletionEffect) {
+            // Single tap - rotates piece
+            p.rotate('right');
+            
+            // Update tracking for potential double tap
+            lastTapTime = touchEndTime;
+            lastTapX = touchX;
+            lastTapY = touchY;
+        }
     }
     
     // Reset touch identifier
