@@ -55,14 +55,16 @@ class TetrisGameView @JvmOverloads constructor(
     private val autoRepeatHandler = Handler(Looper.getMainLooper())
     private var isAutoRepeating = false
     private var currentMovement: (() -> Unit)? = null
-    private val autoRepeatDelay = 40L // Faster repeat for smoother movement
-    private val initialAutoRepeatDelay = 100L // Initial delay before repeating
+    private val autoRepeatDelay = 150L // Increased delay between movements for slower response
+    private val initialAutoRepeatDelay = 200L // Increased initial delay
     private val interpolator = DecelerateInterpolator(1.5f)
     
     // Touch tracking for continuous swipe
     private var lastTouchX = 0f
     private var lastTouchY = 0f
-    private var swipeThreshold = 15f // Distance needed to trigger a move while dragging
+    private var swipeThreshold = 30f // Increased threshold to prevent accidental moves
+    private var lastMoveTime = 0L
+    private val moveCooldown = 200L // Add cooldown between movements
     
     // Refresh timer
     private val refreshHandler = Handler(Looper.getMainLooper())
@@ -329,6 +331,12 @@ class TetrisGameView @JvmOverloads constructor(
             MotionEvent.ACTION_MOVE -> {
                 val diffX = event.x - lastTouchX
                 val diffY = event.y - lastTouchY
+                val currentTime = System.currentTimeMillis()
+                
+                // Check if cooldown has elapsed since last move
+                if (currentTime - lastMoveTime < moveCooldown) {
+                    return true
+                }
                 
                 // Check if drag distance exceeds threshold for continuous movement
                 if (abs(diffX) > swipeThreshold && abs(diffX) > abs(diffY)) {
@@ -341,6 +349,7 @@ class TetrisGameView @JvmOverloads constructor(
                     // Update last position after processing the move
                     lastTouchX = event.x
                     lastTouchY = event.y
+                    lastMoveTime = currentTime
                     invalidate()
                     return true
                 } else if (abs(diffY) > swipeThreshold && abs(diffY) > abs(diffX)) {
@@ -350,6 +359,7 @@ class TetrisGameView @JvmOverloads constructor(
                         // Update last position after processing the move
                         lastTouchX = event.x
                         lastTouchY = event.y
+                        lastMoveTime = currentTime
                         invalidate()
                         return true
                     }
@@ -401,15 +411,17 @@ class TetrisGameView @JvmOverloads constructor(
             return true
         }
         
-        override fun onSingleTapUp(e: MotionEvent): Boolean {
+        override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+            // Use onSingleTapConfirmed instead of onSingleTapUp for better tap detection
+            
             // Determine if tap is on left or right side of screen
             val screenMiddle = width / 2
             
             if (e.x < screenMiddle) {
-                // Left side - rotate counterclockwise (in a real 3D game)
+                // Left side - rotate X axis (horizontal rotation)
                 game?.rotate3DX()
             } else {
-                // Right side - rotate clockwise
+                // Right side - rotate Y axis (vertical rotation)
                 game?.rotate3DY()
             }
             
@@ -431,12 +443,13 @@ class TetrisGameView @JvmOverloads constructor(
                 // Horizontal swipe
                 if (abs(velocityX) > minSwipeVelocity && abs(diffX) > minSwipeDistance) {
                     if (diffX > 0) {
-                        // Swipe right - use auto-repeat for smoother movement
-                        startAutoRepeat { game?.moveRight() }
+                        // Swipe right - move right once, not auto-repeat
+                        game?.moveRight()
                     } else {
-                        // Swipe left - use auto-repeat for smoother movement
-                        startAutoRepeat { game?.moveLeft() }
+                        // Swipe left - move left once, not auto-repeat
+                        game?.moveLeft()
                     }
+                    invalidate()
                     return true
                 }
             } else {

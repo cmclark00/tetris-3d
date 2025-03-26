@@ -29,11 +29,25 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:layout_marginTop="16dp"
-        app:layout_constraintBottom_toTopOf="@+id/controlsHint"
+        app:layout_constraintBottom_toTopOf="@+id/rotationHint"
         app:layout_constraintDimensionRatio="1:2"
         app:layout_constraintEnd_toStartOf="@+id/infoPanel"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/gameTitle" />
+
+    <TextView
+        android:id="@+id/rotationHint"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:gravity="center"
+        android:text="Tap LEFT side: Horizontal Rotation (X) • Tap RIGHT side: Vertical Rotation (Y)"
+        android:textColor="#ffaa00"
+        android:textSize="13sp"
+        app:layout_constraintBottom_toTopOf="@+id/controlsHint"
+        app:layout_constraintEnd_toStartOf="@+id/infoPanel"
+        app:layout_constraintStart_toStartOf="parent" />
 
     <TextView
         android:id="@+id/controlsHint"
@@ -43,9 +57,9 @@
         android:layout_marginEnd="16dp"
         android:layout_marginBottom="16dp"
         android:gravity="center"
-        android:text="Swipe left/right to move • Swipe down for soft drop • Swipe up for hard drop • Tap to rotate"
+        android:text="Swipe left/right to move • Swipe down for soft drop • Swipe up for hard drop"
         android:textColor="#00ffff"
-        android:textSize="14sp"
+        android:textSize="13sp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@+id/infoPanel"
         app:layout_constraintStart_toStartOf="parent" />
