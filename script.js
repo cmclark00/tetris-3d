@@ -70,6 +70,7 @@ let enableSpinAnimations = true;
 let animationSpeed = 0.05;
 let forceMobileControls = false;
 let reduceEffectsOnMobile = true; // New option to reduce effects on mobile
+let startingLevel = 1; // New option for starting level
 
 // Controller variables
 let gamepadConnected = false;
@@ -703,7 +704,8 @@ class Piece {
         // Calculate shadow for new piece
         p.calculateShadowY();
         
-        // Draw the new piece
+        // Draw the new piece and board
+        drawBoard();
         p.draw();
         
         // Play hard drop sound
@@ -1823,7 +1825,8 @@ function togglePause() {
         // Show pause message
         showMessage('PAUSED', 'Press P to Resume');
     } else {
-        gameInterval = setInterval(dropPiece, Math.max(100, 1000 - (level * 100)));
+        let speed = Math.max(100, 1000 - (level * 100));
+        gameInterval = setInterval(dropPiece, speed);
         pauseBtn.textContent = 'Pause';
         // Hide pause message
         hideMessage();
@@ -1834,7 +1837,9 @@ function togglePause() {
 function resetGame() {
     // Reset game variables
     score = 0;
-    level = 1;
+    console.log("Starting level is set to:", startingLevel);
+    level = startingLevel;
+    console.log("Level is now set to:", level);
     lines = 0;
     gameOver = false;
     paused = false;
@@ -1862,13 +1867,18 @@ function resetGame() {
     // Start the game interval
     dropStart = Date.now();
     clearInterval(gameInterval);
-    gameInterval = setInterval(dropPiece, 1000);
+    // Set interval based on starting level
+    let speed = Math.max(100, 1000 - (level * 100));
+    console.log("Game speed set to:", speed, "ms");
+    gameInterval = setInterval(dropPiece, speed);
 }
 
 // Toggle options modal
 function toggleOptionsModal() {
     if (optionsModal.classList.contains('active')) {
         optionsModal.classList.remove('active');
+        // Apply options when closing the modal
+        applyOptions();
     } else {
         optionsModal.classList.add('active');
     }
@@ -1880,6 +1890,7 @@ function applyOptions() {
     enableSpinAnimations = toggleSpinAnimations.checked;
     animationSpeed = parseFloat(animationSpeedSlider.value);
     forceMobileControls = toggleMobileControls.checked;
+    startingLevel = parseInt(document.getElementById('starting-level').value);
     
     // Apply mobile controls if checked or if on mobile device
     if (forceMobileControls) {
@@ -1914,7 +1925,8 @@ function saveOptions() {
         enableSpinAnimations,
         animationSpeed,
         forceMobileControls,
-        reduceEffectsOnMobile
+        reduceEffectsOnMobile,
+        startingLevel
     }));
 }
 
@@ -1929,6 +1941,7 @@ function loadOptions() {
         animationSpeed = options.animationSpeed !== undefined ? options.animationSpeed : 0.05;
         forceMobileControls = options.forceMobileControls !== undefined ? options.forceMobileControls : false;
         reduceEffectsOnMobile = options.reduceEffectsOnMobile !== undefined ? options.reduceEffectsOnMobile : true;
+        startingLevel = options.startingLevel !== undefined ? options.startingLevel : 1;
         
         // Update UI controls
         toggle3DEffects.checked = enable3DEffects;
@@ -1942,6 +1955,10 @@ function loadOptions() {
         if (document.getElementById('toggle-mobile-performance')) {
             document.getElementById('toggle-mobile-performance').checked = reduceEffectsOnMobile;
         }
+        
+        if (document.getElementById('starting-level')) {
+            document.getElementById('starting-level').value = startingLevel;
+        }
     }
 }
 
@@ -1952,6 +1969,10 @@ function init() {
     
     // Load saved options
     loadOptions();
+    
+    // Set initial level
+    level = startingLevel;
+    levelElement.textContent = level;
     
     // Draw the board
     drawBoard();
@@ -1965,7 +1986,9 @@ function init() {
     
     // Set up game interval
     dropStart = Date.now();
-    gameInterval = setInterval(dropPiece, 1000);
+    // Use level-appropriate speed
+    let speed = Math.max(100, 1000 - (level * 100));
+    gameInterval = setInterval(dropPiece, speed);
     
     // Listen for keyboard events
     document.addEventListener('keydown', control);
@@ -1984,6 +2007,14 @@ function init() {
     optionsBtn.addEventListener('click', toggleOptionsModal);
     optionsCloseBtn.addEventListener('click', toggleOptionsModal);
     
+    // Add event listener for the apply button
+    if (document.getElementById('options-apply-btn')) {
+        document.getElementById('options-apply-btn').addEventListener('click', function() {
+            applyOptions();
+            console.log("Options applied, starting level is now:", startingLevel);
+        });
+    }
+    
     // Options event listeners
     toggle3DEffects.addEventListener('change', function() {
         applyOptions();
@@ -1996,6 +2027,12 @@ function init() {
     animationSpeedSlider.addEventListener('input', function() {
         applyOptions();
     });
+    
+    if (document.getElementById('starting-level')) {
+        document.getElementById('starting-level').addEventListener('change', function() {
+            applyOptions();
+        });
+    }
     
     if (document.getElementById('toggle-mobile-performance')) {
         document.getElementById('toggle-mobile-performance').addEventListener('change', function() {
@@ -2891,3 +2928,97 @@ window.onload = function() {
         window.dispatchEvent(new Event('resize'));
     }
 }; 
+
+// Check for completed rows and clear them
+function checkRows() {
+    let linesCleared = 0;
+    let clearedRows = [];
+    
+    for (let r = 0; r < ROWS; r++) {
+        let isRowFull = true;
+        
+        // Check if the row is full
+        for (let c = 0; c < COLS; c++) {
+            if (board[r][c] === EMPTY) {
+                isRowFull = false;
+                break;
+            }
+        }
+        
+        // If the row is full, clear it
+        if (isRowFull) {
+            clearedRows.push(r);
+            linesCleared++;
+            
+            // Shift rows down
+            for (let y = r; y > 0; y--) {
+                for (let c = 0; c < COLS; c++) {
+                    board[y][c] = board[y-1][c];
+                }
+            }
+            
+            // Clear the top row
+            for (let c = 0; c < COLS; c++) {
+                board[0][c] = EMPTY;
+            }
+        }
+    }
+    
+    // Create fireworks for each cleared row
+    if (clearedRows.length > 0) {
+        // Reduce number of fireworks on mobile for better performance
+        const fireworksPerRow = mobilePerformanceMode ? 1 : 3;
+        
+        for (let i = 0; i < clearedRows.length; i++) {
+            // Create multiple fireworks along the row
+            for (let j = 0; j < fireworksPerRow; j++) {
+                const x = (Math.random() * COLS * BLOCK_SIZE) + BLOCK_SIZE/2;
+                const y = (clearedRows[i] * BLOCK_SIZE) + BLOCK_SIZE/2;
+                fireworks.push(new Firework(x, y));
+            }
+        }
+        
+        // Play sound effect for line clear
+        playLineClearSound(clearedRows.length);
+    }
+    
+    return linesCleared;
+}
+
+// Update score based on lines cleared
+function updateScore() {
+    // Get number of lines cleared
+    let linesCleared = checkRows();
+    
+    // Update score
+    if (linesCleared > 0) {
+        // Points increase for multiple lines cleared at once
+        const linePoints = [0, 100, 300, 500, 800]; // 0, 1, 2, 3, 4 lines
+        score += linePoints[linesCleared] * level;
+        lines += linesCleared;
+        
+        // Level up every 10 lines
+        if (Math.floor(lines / 10) > level - 1) {
+            level = Math.floor(lines / 10) + 1;
+            // Speed up the game as level increases
+            clearInterval(gameInterval);
+            gameInterval = setInterval(dropPiece, Math.max(100, 1000 - (level * 100)));
+        }
+        
+        // Update UI
+        scoreElement.textContent = score;
+        levelElement.textContent = level;
+        linesElement.textContent = lines;
+    }
+}
+
+// Simple function to play audio
+function playSound(audioElement) {
+    // Reset the audio to the beginning
+    audioElement.currentTime = 0;
+    // Play the sound
+    audioElement.play().catch(e => {
+        // Suppress errors from autoplay restrictions
+        console.log("Sound play failed:", e);
+    });
+}

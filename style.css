@@ -385,8 +385,9 @@ canvas#tetris {
 /* Options menu styles */
 .option-row {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    margin: 15px 0;
+    margin-bottom: 15px;
     position: relative;
 }
 
@@ -794,4 +795,14 @@ input[type=range]::-moz-range-thumb {
 .instructions-btn {
     margin-top: 15px;
     background: linear-gradient(45deg, #ff9900, #ff5500);
+}
+
+.button-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+}
+
+.button-row .game-btn {
+    margin: 0 5px;
 } 
