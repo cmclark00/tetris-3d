@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">3D Tetris</string>
+    <string name="score">Score</string>
+    <string name="lines">Lines</string>
+    <string name="level">Level</string>
+    <string name="pause">Pause</string>
+    <string name="start">Start</string>
+    <string name="game_over">Game Over</string>
+    <string name="final_score">Final Score</string>
+    <string name="play_again">Play Again</string>
+    <string name="shadow">Shadow</string>
+    <string name="options">Options</string>
+    <string name="enable_3d_effects">3D Effects</string>
+    <string name="enable_spin_animations">Spin Animations</string>
+    <string name="animation_speed">Animation Speed</string>
+    <string name="starting_level">Starting Level</string>
+    <string name="apply">Apply</string>
+    <string name="close">Close</string>
+</resources> 

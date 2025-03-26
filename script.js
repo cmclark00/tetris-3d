@@ -2072,68 +2072,17 @@ function handleResize() {
     const gameWrapper = document.querySelector('.game-wrapper');
     const scoreContainer = document.querySelector('.score-container');
     
-    if (isMobile || forceMobileControls) {
-        // Scale the canvas to fit mobile screen
-        const viewportWidth = Math.min(window.innerWidth, document.documentElement.clientWidth);
-        const viewportHeight = Math.min(window.innerHeight, document.documentElement.clientHeight);
-        
-        // Detect orientation
-        const isPortrait = viewportHeight > viewportWidth;
-        
-        // Calculate available game area (accounting for UI elements)
-        const titleHeight = 40; // Estimate for title
-        const scoreWidth = isPortrait ? 120 : 100; // Width for score container in portrait/landscape
-        const availableWidth = viewportWidth - scoreWidth - 20; // Subtract score width + padding
-        const availableHeight = viewportHeight - titleHeight - 20; // Subtract title height + padding
-        
-        // Calculate optimal dimensions while maintaining aspect ratio
-        const gameRatio = ROWS / COLS;
-        
-        // Calculate scale based on available space
-        let targetWidth, targetHeight;
-        
-        if (isPortrait) {
-            // For portrait, prioritize fitting the width
-            targetWidth = availableWidth * 0.95;
-            targetHeight = targetWidth * gameRatio;
-            
-            // If too tall, scale down based on height
-            if (targetHeight > availableHeight * 0.95) {
-                targetHeight = availableHeight * 0.95;
-                targetWidth = targetHeight / gameRatio;
-            }
-        } else {
-            // For landscape, prioritize fitting the height
-            targetHeight = availableHeight * 0.95;
-            targetWidth = targetHeight / gameRatio;
-            
-            // If too wide, scale down based on width
-            if (targetWidth > availableWidth * 0.95) {
-                targetWidth = availableWidth * 0.95;
-                targetHeight = targetWidth * gameRatio;
-            }
+    // Make sure canvas maintains its dimensions
+    canvas.width = COLS * BLOCK_SIZE;
+    canvas.height = ROWS * BLOCK_SIZE;
+    
+    // Redraw the board and current piece
+    drawBoard();
+    if (p) {
+        p.draw();
+        if (showShadow) {
+            p.drawShadow();
         }
-        
-        // Apply dimensions
-        canvas.style.width = `${targetWidth}px`;
-        canvas.style.height = `${targetHeight}px`;
-        
-        // Force a redraw of the nextPiece preview to fix rendering issues
-        if (nextPiece) {
-            setTimeout(() => {
-                nextPieceCtx.clearRect(0, 0, nextPieceCanvas.width, nextPieceCanvas.height);
-                nextPiece.drawNextPiece();
-            }, 100);
-        }
-        
-        // Show touch controls mode
-        document.body.classList.add('mobile-mode');
-    } else {
-        // Reset to desktop layout
-        canvas.style.width = '';
-        canvas.style.height = '';
-        
-        document.body.classList.remove('mobile-mode');
     }
 }
 

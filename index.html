@@ -2,9 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no, viewport-fit=cover">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Tetris</title>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -80,53 +78,41 @@
     <!-- Options Modal -->
     <div id="options-modal" class="modal">
         <div class="modal-content">
-            <h2>Game Options</h2>
+            <h2>Options</h2>
             
             <div class="option-row">
-                <label for="toggle-3d-effects">Enable 3D Effects</label>
-                <input type="checkbox" id="toggle-3d-effects" checked>
+                <label for="toggle-3d-effects">3D Effects</label>
+                <label class="switch">
+                    <input type="checkbox" id="toggle-3d-effects" checked>
+                    <span class="slider round"></span>
+                </label>
+                <span class="tooltip">Enable 3D block rendering for a more immersive experience</span>
             </div>
             
             <div class="option-row">
-                <label for="toggle-spin-animations">Enable Spin Animations</label>
-                <input type="checkbox" id="toggle-spin-animations" checked>
+                <label for="toggle-spin-animations">Spin Animations</label>
+                <label class="switch">
+                    <input type="checkbox" id="toggle-spin-animations" checked>
+                    <span class="slider round"></span>
+                </label>
+                <span class="tooltip">Show 3D rotation animations when rotating pieces</span>
             </div>
             
             <div class="option-row">
                 <label for="animation-speed">Animation Speed</label>
                 <input type="range" id="animation-speed" min="0.01" max="0.1" step="0.01" value="0.05">
-            </div>
-            
-            <div class="option-row mobile-only">
-                <label for="toggle-mobile-controls">Force Mobile Controls</label>
-                <input type="checkbox" id="toggle-mobile-controls">
-            </div>
-            
-            <div class="option-row">
-                <label for="toggle-mobile-performance">Performance Mode</label>
-                <input type="checkbox" id="toggle-mobile-performance">
-                <span class="tooltip">Reduces visual effects for better performance on mobile devices</span>
+                <span class="tooltip">Adjust the speed of 3D animations</span>
             </div>
             
             <div class="option-row">
                 <label for="starting-level">Starting Level</label>
-                <select id="starting-level">
-                    <option value="1">Level 1</option>
-                    <option value="2">Level 2</option>
-                    <option value="3">Level 3</option>
-                    <option value="4">Level 4</option>
-                    <option value="5">Level 5</option>
-                    <option value="6">Level 6</option>
-                    <option value="7">Level 7</option>
-                    <option value="8">Level 8</option>
-                    <option value="9">Level 9</option>
-                    <option value="10">Level 10</option>
-                </select>
+                <input type="number" id="starting-level" min="1" max="10" value="1">
+                <span class="tooltip">Set the level you want to start at (1-10)</span>
             </div>
             
             <div class="button-row">
-                <button id="options-apply-btn" class="game-btn">Apply</button>
                 <button id="options-close-btn" class="game-btn">Close</button>
+                <button id="options-apply-btn" class="game-btn">Apply</button>
             </div>
         </div>
     </div>
