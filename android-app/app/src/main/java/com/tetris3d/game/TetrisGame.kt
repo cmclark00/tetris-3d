@@ -17,6 +17,9 @@ class TetrisGame(private var options: GameOptions) {
         // 3D rotation directions
         private const val ROTATION_X = 0
         private const val ROTATION_Y = 1
+        
+        // Refresh interval for animations
+        const val REFRESH_INTERVAL = 16L // ~60fps
     }
 
     // Game state
@@ -231,11 +234,26 @@ class TetrisGame(private var options: GameOptions) {
                 // Update rotation animation
                 updateRotation()
                 
+                // If a line clear effect is in progress, wait for it to complete
+                // The view will handle updating and completing the animation
+                if (lineClearEffect) {
+                    gameHandler.postDelayed(this, REFRESH_INTERVAL)
+                    return
+                }
+                
                 // Move the current piece down
                 if (!moveDown()) {
                     // If can't move down, lock the piece
                     lockPiece()
                     clearRows()
+                    
+                    // If a line clear effect started, wait for next frame
+                    if (lineClearEffect) {
+                        gameHandler.postDelayed(this, REFRESH_INTERVAL)
+                        return
+                    }
+                    
+                    // Otherwise, continue with creating a new piece
                     if (!createNewPiece()) {
                         gameOver()
                     }
@@ -394,6 +412,12 @@ class TetrisGame(private var options: GameOptions) {
             while (moveDown()) {}
             lockPiece()
             clearRows()
+            
+            // If line clear animation started, return and let the game loop handle it
+            if (lineClearEffect) {
+                return true
+            }
+            
             if (!createNewPiece()) {
                 gameOver()
             } else {
@@ -408,7 +432,7 @@ class TetrisGame(private var options: GameOptions) {
     
     fun rotate3DX(): Boolean {
         if (isRunning && !isGameOver && options.enable3DEffects) {
-            // In 3D, rotating along X would change the way the piece appears from front/back
+            // In 3D, rotating along X would flip the piece vertically
             rotation3DX = (rotation3DX + 1) % maxRotation3D
             
             // Start rotation animation
@@ -418,10 +442,75 @@ class TetrisGame(private var options: GameOptions) {
                 rotationProgress = 0f
             }
             
-            // If it's a quarter or three-quarter rotation, actually change the piece orientation
+            // If it's a quarter or three-quarter rotation, actually mirror the piece vertically
             if (rotation3DX % (maxRotation3D / 2) == 1) {
-                // This simulates a 3D rotation by performing a 2D rotation
-                return rotate()
+                // Create a vertically mirrored version of the current piece
+                val currentPattern = getCurrentPieceArray()
+                val rows = currentPattern.size
+                val cols = if (rows > 0) currentPattern[0].size else 0
+                val mirroredPattern = Array(rows) { r -> Array(cols) { c -> currentPattern[rows - 1 - r][c] } }
+                
+                // Check if the mirrored position is valid
+                if (!checkCollision(currentX, currentY, mirroredPattern)) {
+                    // Replace the current rotation with the mirrored pattern
+                    // Since we don't actually modify the pieces, simulate this by finding a rotation
+                    // that most closely resembles the mirrored pattern, if one exists
+                    
+                    // For symmetrical pieces like O, this may not change anything
+                    val pieceVariants = pieces[currentPiece]
+                    for (i in pieceVariants.indices) {
+                        if (patternsAreEquivalent(mirroredPattern, pieceVariants[i])) {
+                            currentRotation = i
+                            return true
+                        }
+                    }
+                    
+                    // If no matching rotation found, just use regular rotation as fallback
+                    return rotate()
+                } else {
+                    // Try wall kicks with the mirrored pattern
+                    // Try moving right
+                    if (!checkCollision(currentX + 1, currentY, mirroredPattern)) {
+                        currentX++
+                        // Find equivalent rotation
+                        val pieceVariants = pieces[currentPiece]
+                        for (i in pieceVariants.indices) {
+                            if (patternsAreEquivalent(mirroredPattern, pieceVariants[i])) {
+                                currentRotation = i
+                                return true
+                            }
+                        }
+                        return rotate()
+                    }
+                    // Try moving left
+                    if (!checkCollision(currentX - 1, currentY, mirroredPattern)) {
+                        currentX--
+                        // Find equivalent rotation
+                        val pieceVariants = pieces[currentPiece]
+                        for (i in pieceVariants.indices) {
+                            if (patternsAreEquivalent(mirroredPattern, pieceVariants[i])) {
+                                currentRotation = i
+                                return true
+                            }
+                        }
+                        return rotate()
+                    }
+                    // Try moving up
+                    if (!checkCollision(currentX, currentY - 1, mirroredPattern)) {
+                        currentY--
+                        // Find equivalent rotation
+                        val pieceVariants = pieces[currentPiece]
+                        for (i in pieceVariants.indices) {
+                            if (patternsAreEquivalent(mirroredPattern, pieceVariants[i])) {
+                                currentRotation = i
+                                return true
+                            }
+                        }
+                        return rotate()
+                    }
+                    
+                    // If all fails, don't change the actual piece, just visual effect
+                }
             }
             
             // Add extra score for 3D rotations when they don't result in a piece rotation
@@ -434,7 +523,7 @@ class TetrisGame(private var options: GameOptions) {
     
     fun rotate3DY(): Boolean {
         if (isRunning && !isGameOver && options.enable3DEffects) {
-            // In 3D, rotating along Y would change the way the piece appears from left/right
+            // In 3D, rotating along Y would flip the piece horizontally
             rotation3DY = (rotation3DY + 1) % maxRotation3D
             
             // Start rotation animation
@@ -444,36 +533,87 @@ class TetrisGame(private var options: GameOptions) {
                 rotationProgress = 0f
             }
             
-            // If it's a quarter or three-quarter rotation, actually change the piece orientation
+            // If it's a quarter or three-quarter rotation, actually mirror the piece horizontally
             if (rotation3DY % (maxRotation3D / 2) == 1) {
-                // This simulates a 3D rotation by performing a 2D rotation in the opposite direction
-                val nextRotation = (currentRotation - 1 + pieces[currentPiece].size) % pieces[currentPiece].size
-                val nextPattern = pieces[currentPiece][nextRotation]
+                // Create a horizontally mirrored version of the current piece
+                val currentPattern = getCurrentPieceArray()
+                val rows = currentPattern.size
+                val cols = if (rows > 0) currentPattern[0].size else 0
+                val mirroredPattern = Array(rows) { r -> Array(cols) { c -> currentPattern[r][cols - 1 - c] } }
                 
-                if (!checkCollision(currentX, currentY, nextPattern)) {
-                    currentRotation = nextRotation
-                    return true
-                } else {
-                    // Try wall kicks
-                    // Try moving right
-                    if (!checkCollision(currentX + 1, currentY, nextPattern)) {
-                        currentX++
-                        currentRotation = nextRotation
-                        return true
-                    }
-                    // Try moving left
-                    if (!checkCollision(currentX - 1, currentY, nextPattern)) {
-                        currentX--
-                        currentRotation = nextRotation
-                        return true
-                    }
-                    // Try moving up (for I piece mostly)
-                    if (!checkCollision(currentX, currentY - 1, nextPattern)) {
-                        currentY--
-                        currentRotation = nextRotation
-                        return true
+                // Try to find an equivalent pattern in any piece type
+                // This allows for pieces to transform into different piece types when mirrored
+                for (pieceType in 0 until pieces.size) {
+                    val pieceVariants = pieces[pieceType]
+                    for (rotation in pieceVariants.indices) {
+                        // Check if this variant matches our mirrored pattern
+                        if (patternsAreEquivalent(mirroredPattern, pieceVariants[rotation])) {
+                            // Transform into this piece type with this rotation
+                            currentPiece = pieceType
+                            currentRotation = rotation
+                            currentColor = colors[currentPiece]
+                            return true
+                        }
                     }
                 }
+                
+                // If no exact match was found, find the most similar pattern
+                var bestPieceType = -1
+                var bestRotation = -1
+                var bestScore = -1
+                
+                for (pieceType in 0 until pieces.size) {
+                    val pieceVariants = pieces[pieceType]
+                    for (rotation in pieceVariants.indices) {
+                        val score = patternMatchScore(mirroredPattern, pieceVariants[rotation])
+                        if (score > bestScore) {
+                            bestScore = score
+                            bestPieceType = pieceType
+                            bestRotation = rotation
+                        }
+                    }
+                }
+                
+                // If we found a reasonable match
+                if (bestScore > 0) {
+                    // If this is a collision-free position, perform the transformation
+                    if (!checkCollision(currentX, currentY, pieces[bestPieceType][bestRotation])) {
+                        currentPiece = bestPieceType
+                        currentRotation = bestRotation
+                        currentColor = colors[currentPiece]
+                        return true
+                    } else {
+                        // Try wall kicks with the new piece
+                        // Try moving right
+                        if (!checkCollision(currentX + 1, currentY, pieces[bestPieceType][bestRotation])) {
+                            currentX++
+                            currentPiece = bestPieceType
+                            currentRotation = bestRotation
+                            currentColor = colors[currentPiece]
+                            return true
+                        }
+                        // Try moving left
+                        if (!checkCollision(currentX - 1, currentY, pieces[bestPieceType][bestRotation])) {
+                            currentX--
+                            currentPiece = bestPieceType
+                            currentRotation = bestRotation
+                            currentColor = colors[currentPiece]
+                            return true
+                        }
+                        // Try moving up
+                        if (!checkCollision(currentX, currentY - 1, pieces[bestPieceType][bestRotation])) {
+                            currentY--
+                            currentPiece = bestPieceType
+                            currentRotation = bestRotation
+                            currentColor = colors[currentPiece]
+                            return true
+                        }
+                    }
+                }
+                
+                // If we couldn't find a good transformation, just do a regular rotation
+                // as a fallback to ensure some response to the user's action
+                return rotate()
             }
             
             // Add extra score for 3D rotations when they don't result in a piece rotation
@@ -575,9 +715,26 @@ class TetrisGame(private var options: GameOptions) {
         }
     }
     
+    // Line clearing animation properties
+    private var lineClearEffect = false
+    private var clearedRows = mutableListOf<Int>()
+    private var lineClearProgress = 0f
+    private val maxLineClearDuration = 0.5f  // In seconds
+    private var lineClearStartTime = 0L
+    
+    // Getter for line clear effect
+    fun isLineClearEffect(): Boolean = lineClearEffect
+    
+    // Get the cleared rows for animation
+    fun getClearedRows(): List<Int> = clearedRows
+    
+    // Get line clear animation progress (0-1)
+    fun getLineClearProgress(): Float = lineClearProgress
+    
     private fun clearRows() {
-        var linesCleared = 0
+        clearedRows.clear()
         
+        // First pass: identify full rows
         for (r in 0 until ROWS) {
             var rowFull = true
             
@@ -589,42 +746,91 @@ class TetrisGame(private var options: GameOptions) {
             }
             
             if (rowFull) {
-                // Move all rows above down
-                for (y in r downTo 1) {
-                    for (c in 0 until COLS) {
-                        board[y][c] = board[y - 1][c]
-                    }
-                }
-                
-                // Clear top row
-                for (c in 0 until COLS) {
-                    board[0][c] = EMPTY
-                }
-                
-                linesCleared++
+                clearedRows.add(r)
             }
         }
         
-        if (linesCleared > 0) {
-            // Update lines and score
-            lines += linesCleared
+        // If we have cleared rows, start the animation
+        if (clearedRows.isNotEmpty()) {
+            lineClearEffect = true
+            lineClearProgress = 0f
+            lineClearStartTime = System.currentTimeMillis()
             
-            // Calculate score based on lines cleared and level
-            when (linesCleared) {
-                1 -> score += 100 * level
-                2 -> score += 300 * level
-                3 -> score += 500 * level
-                4 -> score += 800 * level
+            // The actual row clearing will be done when the animation completes
+            // This is handled in the updateLineClear method
+            
+            // The rows are still part of the board during animation but will be
+            // displayed with a special effect by the view
+        } else {
+            // No rows to clear, continue with normal gameplay
+            return
+        }
+        
+        // Mark the start of the animation
+        // The actual row clearance will happen after the animation
+    }
+    
+    // Update line clear animation
+    fun updateLineClear(): Boolean {
+        if (!lineClearEffect) return false
+        
+        // Calculate progress based on elapsed time
+        val elapsedTime = (System.currentTimeMillis() - lineClearStartTime) / 1000f
+        lineClearProgress = (elapsedTime / maxLineClearDuration).coerceIn(0f, 1f)
+        
+        // If animation is complete, apply the row clearing
+        if (lineClearProgress >= 1f) {
+            // Actually clear the rows and update score
+            completeLineClear()
+            
+            // Reset animation state
+            lineClearEffect = false
+            lineClearProgress = 0f
+            return true
+        }
+        
+        return false
+    }
+    
+    // Complete the line clearing after animation
+    private fun completeLineClear() {
+        val linesCleared = clearedRows.size
+        
+        // Process cleared rows in descending order to avoid index issues
+        val sortedRows = clearedRows.sortedDescending()
+        
+        for (row in sortedRows) {
+            // Move all rows above down
+            for (y in row downTo 1) {
+                for (c in 0 until COLS) {
+                    board[y][c] = board[y - 1][c]
+                }
             }
             
-            // Update level (every 10 lines)
-            level = (lines / 10) + options.startingLevel
-            
-            // Notify listeners
-            gameStateListener?.onScoreChanged(score)
-            gameStateListener?.onLinesChanged(lines)
-            gameStateListener?.onLevelChanged(level)
+            // Clear top row
+            for (c in 0 until COLS) {
+                board[0][c] = EMPTY
+            }
         }
+        
+        // Update lines and score
+        lines += linesCleared
+        
+        // Calculate score based on lines cleared and level
+        when (linesCleared) {
+            1 -> score += 100 * level
+            2 -> score += 300 * level
+            3 -> score += 500 * level
+            4 -> score += 800 * level
+        }
+        
+        // Update level (every 10 lines)
+        level = (lines / 10) + options.startingLevel
+        
+        // Notify listeners
+        gameStateListener?.onScoreChanged(score)
+        gameStateListener?.onLinesChanged(lines)
+        gameStateListener?.onLevelChanged(level)
     }
     
     private fun checkCollision(x: Int, y: Int, piece: Array<Array<Int>>): Boolean {
@@ -719,4 +925,43 @@ class TetrisGame(private var options: GameOptions) {
     fun getRotation3DX(): Float = if (isRotating) currentRotation3DX else rotation3DX.toFloat()
     fun getRotation3DY(): Float = if (isRotating) currentRotation3DY else rotation3DY.toFloat()
     fun isRotating(): Boolean = isRotating
+    
+    // Helper function to check if two patterns are equivalent (ignoring empty space)
+    private fun patternsAreEquivalent(pattern1: Array<Array<Int>>, pattern2: Array<Array<Int>>): Boolean {
+        // Quick check for size match
+        if (pattern1.size != pattern2.size) return false
+        if (pattern1.isEmpty() || pattern2.isEmpty()) return pattern1.isEmpty() && pattern2.isEmpty()
+        if (pattern1[0].size != pattern2[0].size) return false
+        
+        // Check if cells with 1s match in both patterns
+        for (r in pattern1.indices) {
+            for (c in pattern1[r].indices) {
+                if (pattern1[r][c] != pattern2[r][c]) {
+                    return false
+                }
+            }
+        }
+        
+        return true
+    }
+    
+    // Helper function to score how well two patterns match (higher score = better match)
+    private fun patternMatchScore(pattern1: Array<Array<Int>>, pattern2: Array<Array<Int>>): Int {
+        // Quick check for size match
+        if (pattern1.size != pattern2.size) return 0
+        if (pattern1.isEmpty() || pattern2.isEmpty()) return if (pattern1.isEmpty() && pattern2.isEmpty()) 1 else 0
+        if (pattern1[0].size != pattern2[0].size) return 0
+        
+        // Count matching cells
+        var matchCount = 0
+        for (r in pattern1.indices) {
+            for (c in pattern1[r].indices) {
+                if (pattern1[r][c] == pattern2[r][c]) {
+                    matchCount++
+                }
+            }
+        }
+        
+        return matchCount
+    }
 } 
